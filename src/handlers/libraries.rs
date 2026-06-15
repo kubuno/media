@@ -59,7 +59,7 @@ pub async fn create_library(
             .ok_or_else(|| MediaError::Validation("storage.files_storage_base non configuré sur ce serveur".into()))?;
 
         let folder_path: String = sqlx::query_scalar!(
-            "SELECT path FROM files.folders WHERE id = $1 AND owner_id = $2",
+            "SELECT path FROM drive.folders WHERE id = $1 AND owner_id = $2",
             folder_id,
             owner_id,
         )
@@ -168,7 +168,7 @@ pub async fn list_files_folders(
         r#"SELECT f.id, f.owner_id, f.path, f.name,
                   u.email        AS owner_email,
                   u.display_name AS owner_display_name
-           FROM files.folders f
+           FROM drive.folders f
            JOIN core.users u ON u.id = f.owner_id
            ORDER BY u.email, f.path"#
     )
