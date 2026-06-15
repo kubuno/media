@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.title, a.release_year, a.cover_path, ar.name AS artist_name\n           FROM media.albums a\n           LEFT JOIN media.artists ar ON ar.id = a.artist_id\n           ORDER BY a.created_at DESC\n           LIMIT 20",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "release_year",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "cover_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "artist_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "1d8536302789be1ab10f812e3133c6fa4a0c17681960f6429bc7c4debd52ea80"
+}

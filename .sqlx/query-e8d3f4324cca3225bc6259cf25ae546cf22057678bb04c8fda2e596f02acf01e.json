@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, first_air_date, poster_path\n           FROM media.tv_shows\n           WHERE LOWER(name) LIKE $1\n           LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "first_air_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "poster_path",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "e8d3f4324cca3225bc6259cf25ae546cf22057678bb04c8fda2e596f02acf01e"
+}

@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, description, cover_path, playlist_type,\n                  is_public, track_count, duration_secs, created_at\n           FROM media.playlists\n           WHERE owner_id = $1 OR is_public = TRUE\n           ORDER BY created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "cover_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "playlist_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_public",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "track_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "102d3380924f33571e7a20c13b1ee5983cdd9a0bed7affe1cdced61504cef88d"
+}

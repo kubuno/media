@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, title, duration_secs, play_count, album_id\n           FROM media.tracks WHERE artist_id = $1 ORDER BY play_count DESC LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "play_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "album_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "3ec4414844c22e55ee66570947d01153a6408bac8e86f30211ca472d312c420d"
+}

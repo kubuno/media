@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.movies SET meta_status = 'error_meta' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc7f3e40b20e869c0c447adbb73d28ed992c99f6ed6d3d7e3c7534ef6bbc8ffb"
+}

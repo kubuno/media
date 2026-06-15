@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, title, original_title, release_date,\n                  vote_average::FLOAT8, poster_path, backdrop_path,\n                  duration_secs, meta_status\n           FROM media.movies\n           ORDER BY title\n           LIMIT $1 OFFSET $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "original_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "release_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 4,
+        "name": "vote_average",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "poster_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "backdrop_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "meta_status",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      null,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b2284fd7769f8225250caab01faa63c21cc8db8f324cf097ed8c6748b5625911"
+}

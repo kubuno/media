@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT status, files_found, files_processed, files_added, error_message\n           FROM media.scan_jobs\n           WHERE library_id = $1\n           ORDER BY created_at DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "files_found",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "files_processed",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "files_added",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "error_message",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "d760814e9f9d3a83dc9f22c1d980cc759b397bdb997ccaba2aa2e89769b4451b"
+}

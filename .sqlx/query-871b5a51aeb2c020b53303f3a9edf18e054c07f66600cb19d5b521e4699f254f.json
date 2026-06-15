@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media.liked_tracks WHERE user_id = $1 AND track_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "871b5a51aeb2c020b53303f3a9edf18e054c07f66600cb19d5b521e4699f254f"
+}

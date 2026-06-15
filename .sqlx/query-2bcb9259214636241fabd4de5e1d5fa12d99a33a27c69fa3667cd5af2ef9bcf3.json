@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, episode_number, name, overview, air_date, still_path,\n                  vote_average::FLOAT8, duration_secs, meta_status, file_path\n           FROM media.tv_episodes WHERE season_id = $1 ORDER BY episode_number",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "episode_number",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "overview",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "air_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 5,
+        "name": "still_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "vote_average",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "meta_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "file_path",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "2bcb9259214636241fabd4de5e1d5fa12d99a33a27c69fa3667cd5af2ef9bcf3"
+}

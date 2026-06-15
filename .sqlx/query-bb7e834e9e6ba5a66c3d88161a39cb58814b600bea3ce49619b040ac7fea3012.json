@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.scan_jobs\n           SET status = 'done', files_processed = $2, files_added = $3, finished_at = NOW()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bb7e834e9e6ba5a66c3d88161a39cb58814b600bea3ce49619b040ac7fea3012"
+}

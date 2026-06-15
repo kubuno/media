@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.video_progress\n               (user_id, item_type, item_id, position_secs, duration_secs, percent_played, is_watched)\n           VALUES ($1, $2, $3, $4, $5, $6::NUMERIC, $7)\n           ON CONFLICT (user_id, item_type, item_id) DO UPDATE\n               SET position_secs  = EXCLUDED.position_secs,\n                   duration_secs  = EXCLUDED.duration_secs,\n                   percent_played = EXCLUDED.percent_played,\n                   is_watched     = EXCLUDED.is_watched,\n                   last_played_at = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Numeric",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "937c8c824e6b50372a4811a89f42b7e4b4eea3b8a58c80fced9b04557bf22aee"
+}

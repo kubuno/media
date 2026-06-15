@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.listen_history (user_id, track_id, listened_secs, is_complete)\n           VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c58d06e70e7e0fc16217ef3846ac5400a4310ae9c7d36ccf2039f5ee45504d99"
+}

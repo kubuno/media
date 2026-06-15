@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.title, t.duration_secs, t.album_id,\n                  al.title AS album_title, al.cover_path,\n                  ar.name AS artist_name, ar.id AS artist_id,\n                  lt.liked_at\n           FROM media.liked_tracks lt\n           JOIN media.tracks  t  ON t.id  = lt.track_id\n           LEFT JOIN media.albums  al ON al.id = t.album_id\n           LEFT JOIN media.artists ar ON ar.id = t.artist_id\n           WHERE lt.user_id = $1\n           ORDER BY lt.liked_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "album_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "album_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "cover_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "artist_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "artist_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "liked_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "51138d5034cc147322bc5823cc7fd9a34fde136e22c1f6c8801f8b9829feb129"
+}

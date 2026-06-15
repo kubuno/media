@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (t.id)\n                  t.id, t.title, t.duration_secs, t.album_id,\n                  al.title AS album_title, al.cover_path,\n                  ar.name AS artist_name, ar.id AS artist_id,\n                  lh.played_at\n           FROM media.listen_history lh\n           JOIN media.tracks  t  ON t.id  = lh.track_id\n           LEFT JOIN media.albums  al ON al.id = t.album_id\n           LEFT JOIN media.artists ar ON ar.id = t.artist_id\n           WHERE lh.user_id = $1\n           ORDER BY t.id, lh.played_at DESC\n           LIMIT 20",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "album_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "album_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "cover_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "artist_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "artist_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "played_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a64e3563068814b6d3dfc89439e052d6c056e7a4c726af5836e86142f6cd6057"
+}

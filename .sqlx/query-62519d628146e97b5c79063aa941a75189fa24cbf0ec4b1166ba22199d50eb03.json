@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.tv_episodes\n               (season_id, show_id, file_path, file_size, episode_number,\n                duration_secs, video_codec, audio_codec, resolution_w, resolution_h)\n               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)\n               ON CONFLICT (file_path) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "62519d628146e97b5c79063aa941a75189fa24cbf0ec4b1166ba22199d50eb03"
+}

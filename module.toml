@@ -1,0 +1,49 @@
+[module]
+id           = "media"
+display_name = "Media"
+version      = "0.1.0"
+description  = "Streaming multimédia — Watch (films/séries) et Listen (musique)"
+author       = "Kubuno Contributors"
+license      = "AGPL-3.0"
+homepage_url = "https://github.com/kubuno/kubuno"
+runtime      = "rust"
+dependencies = []
+settings_path = "/media/watch/settings"
+
+[process]
+entrypoint = "kubuno-media"
+args       = []
+
+[server]
+host = "127.0.0.1"
+port = 3113
+
+[routes]
+patterns = [
+    { method = "*", path = "/*" },
+]
+
+[[sidebar_items]]
+id       = "media-watch"
+label    = "Watch"
+icon     = "Tv"
+path     = "/media/watch"
+position = 45
+section  = "main"
+
+[[sidebar_items]]
+id       = "media-listen"
+label    = "Listen"
+icon     = "Music"
+path     = "/media/listen"
+position = 46
+section  = "main"
+
+[events]
+subscribed = [
+    "UserDeleted",
+]
+publishes = [
+    "MediaPlayed",
+    "PlaylistUpdated",
+]

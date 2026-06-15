@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.tv_seasons (show_id, season_number)\n                       VALUES ($1, $2)\n                       ON CONFLICT (show_id, season_number) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "af5272eef2ba6c3e699ccebdc4caa4ca0091b49c060c3d5a819c83a79a141fb5"
+}

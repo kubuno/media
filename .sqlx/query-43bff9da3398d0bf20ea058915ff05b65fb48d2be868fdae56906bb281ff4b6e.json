@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.video_progress\n               (user_id, item_type, item_id, position_secs, duration_secs, percent_played, is_watched)\n           VALUES ($1, 'movie', $2, 0, 0, $3::NUMERIC, $4)\n           ON CONFLICT (user_id, item_type, item_id) DO UPDATE\n               SET is_watched     = EXCLUDED.is_watched,\n                   percent_played = EXCLUDED.percent_played,\n                   last_played_at = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Numeric",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "43bff9da3398d0bf20ea058915ff05b65fb48d2be868fdae56906bb281ff4b6e"
+}

@@ -1,0 +1,54 @@
+# ─── Kubuno Media — Configuration ────────────────────────────────────────────
+# Copiez ce fichier en config.toml et adaptez les valeurs.
+# Les variables d'environnement préfixées KM__ surchargent ce fichier.
+# Exemple : KM__SERVER__PORT=3113
+
+[server]
+host = "127.0.0.1"
+port = 3113
+
+[core]
+url             = "http://127.0.0.1:8080"
+internal_secret = "change_me"
+
+# ── Base de données ───────────────────────────────────────────────────────────
+# Les paramètres de connexion sont injectés par le superviseur Kubuno via
+# KUBUNO_DB_HOST / KUBUNO_DB_PORT / KUBUNO_DB_USER / KUBUNO_DB_PASSWORD / KUBUNO_DB_NAME.
+
+[storage]
+backend    = "local"
+local_path = "/var/lib/kubuno/modules/media/files"
+temp_path  = "/var/lib/kubuno/modules/media/tmp"
+
+[libraries]
+default_root = "/var/kubuno/media"
+cache_path   = "/var/kubuno/media/.cache"
+
+[transcoding]
+ffmpeg_bin           = "ffmpeg"
+ffprobe_bin          = "ffprobe"
+hls_segment_duration = 6
+video_codec          = "libx264"
+audio_codec          = "aac"
+max_concurrent       = 2
+keep_transcode_days  = 30
+
+[metadata]
+# Obtenir une clé gratuite sur https://www.themoviedb.org/settings/api
+tmdb_api_key      = ""
+tmdb_base_url     = "https://api.themoviedb.org/3"
+tmdb_image_base   = "https://image.tmdb.org/t/p"
+tmdb_language     = "fr-FR"
+musicbrainz_url   = "https://musicbrainz.org/ws/2"
+cover_art_url     = "https://coverartarchive.org"
+musicbrainz_agent = "KubunoMedia/0.1.0 (https://github.com/kubuno/kubuno)"
+
+[scan]
+video_extensions    = ["mkv", "mp4", "avi", "mov", "m4v", "ts", "wmv", "webm", "mpg", "mpeg"]
+audio_extensions    = ["mp3", "flac", "m4a", "ogg", "opus", "wav", "aac", "wma"]
+subtitle_extensions = ["srt", "ass", "ssa", "vtt", "sub"]
+watch_filesystem    = true
+
+[logging]
+level  = "info"
+format = "pretty"

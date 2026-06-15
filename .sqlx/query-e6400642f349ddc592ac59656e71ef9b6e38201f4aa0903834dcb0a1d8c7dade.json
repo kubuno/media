@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT position_secs, duration_secs, percent_played::FLOAT8,\n                  is_watched, last_played_at\n           FROM media.video_progress\n           WHERE user_id=$1 AND item_type='movie' AND item_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "percent_played",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "is_watched",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_played_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "e6400642f349ddc592ac59656e71ef9b6e38201f4aa0903834dcb0a1d8c7dade"
+}

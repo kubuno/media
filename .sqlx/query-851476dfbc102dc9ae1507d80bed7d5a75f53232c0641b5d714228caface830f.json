@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.libraries SET scan_status = 'scanning', scan_error = NULL WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "851476dfbc102dc9ae1507d80bed7d5a75f53232c0641b5d714228caface830f"
+}
