@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.movies\n           SET tmdb_id              = NULL,\n               imdb_id              = NULL,\n               overview             = NULL,\n               tagline              = NULL,\n               release_date         = NULL,\n               runtime_mins         = NULL,\n               poster_path          = NULL,\n               backdrop_path        = NULL,\n               vote_average         = NULL,\n               vote_count           = NULL,\n               popularity           = NULL,\n               genres               = '{}',\n               original_language    = NULL,\n               production_countries = '{}',\n               cast_json            = '[]',\n               crew_json            = '[]',\n               meta_status          = 'pending_meta'\n           WHERE id = $1\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "680742526bfddf3cb2177c207ecc60fdebe7741eab4072332fcebce63067fd9b"
+}

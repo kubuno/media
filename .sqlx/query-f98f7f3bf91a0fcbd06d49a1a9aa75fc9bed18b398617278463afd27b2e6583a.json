@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.playlists\n           SET name        = COALESCE($3, name),\n               description = COALESCE($4, description),\n               is_public   = COALESCE($5, is_public)\n           WHERE id = $1 AND owner_id = $2\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f98f7f3bf91a0fcbd06d49a1a9aa75fc9bed18b398617278463afd27b2e6583a"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.settings (key, value) VALUES ('metadata_language', $1)\n             ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "26dddaf4f86e0027a112efa9b012723d65ae71298ab71c51e27c22fe13425334"
+}

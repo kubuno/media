@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.playlists\n           SET track_count   = (SELECT COUNT(*) FROM media.playlist_tracks WHERE playlist_id = $1),\n               duration_secs = (SELECT COALESCE(SUM(t.duration_secs), 0)\n                                FROM media.playlist_tracks pt\n                                JOIN media.tracks t ON t.id = pt.track_id\n                                WHERE pt.playlist_id = $1)\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "04f5efeb184c41d80824076222e158468afc85b236076e99e6e603d1021a8f42"
+}

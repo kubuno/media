@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media.albums\n           WHERE library_id = $1\n           AND id NOT IN (\n               SELECT DISTINCT album_id FROM media.tracks WHERE album_id IS NOT NULL\n           )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b74536ca7a34828550c344945b4f2fa68581d98e5b95383e97ee5f0ff25b8042"
+}

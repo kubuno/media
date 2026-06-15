@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.libraries\n           SET item_count   = item_count + $2,\n               last_scan_at = NOW(),\n               scan_status  = 'idle'\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de3a12986b4cc09bbf1b060fdddbcf6aa9481c9e734a2b5888f0ccf2aa942f80"
+}

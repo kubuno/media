@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.title, t.duration_secs,\n                  al.title AS album_title, al.cover_path,\n                  ar.name AS artist_name\n           FROM media.tracks t\n           LEFT JOIN media.albums al ON al.id = t.album_id\n           LEFT JOIN media.artists ar ON ar.id = t.artist_id\n           WHERE LOWER(t.title) LIKE $1\n           LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "album_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "cover_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "artist_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "aafca2ffac80bf129d83f329e13a780eedce00bab6efb7c4bc5cdd46f02d55bf"
+}

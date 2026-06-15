@@ -1,0 +1,126 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.libraries\n               (owner_id, name, lib_type, path, icon, color, is_shared,\n                source_type, files_folder_id, files_owner_id)\n               VALUES ($1,$2,$3,$4,$5,$6,$7,'files_folder',$8,$9)\n               RETURNING id, owner_id, name, lib_type, path, icon, color,\n                         is_shared, item_count, last_scan_at, scan_status,\n                         scan_error, source_type, files_folder_id, files_owner_id,\n                         created_at, updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "owner_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "lib_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "icon",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "color",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_shared",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "item_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_scan_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "scan_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "scan_error",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "source_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 13,
+        "name": "files_folder_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 14,
+        "name": "files_owner_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 15,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Bool",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "f8a771a9b7a3a5cfb0a571d6c5f8e16f12ce02385fc301830104fe52430ce449"
+}

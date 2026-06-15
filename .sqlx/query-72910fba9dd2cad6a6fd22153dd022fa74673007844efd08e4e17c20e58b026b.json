@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.movies SET meta_status = 'pending_meta'\n         WHERE meta_status IN ('error_meta', 'pending_meta')\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "72910fba9dd2cad6a6fd22153dd022fa74673007844efd08e4e17c20e58b026b"
+}

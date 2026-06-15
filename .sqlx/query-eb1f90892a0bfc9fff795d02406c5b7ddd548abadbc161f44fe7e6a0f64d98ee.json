@@ -1,0 +1,154 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, library_id, name, original_name, overview, tagline,\n                  first_air_date, last_air_date, status, poster_path, backdrop_path,\n                  vote_average::FLOAT8, vote_count, genres, networks, season_count, episode_count,\n                  original_language, cast_json, crew_json, meta_status, created_at, updated_at\n           FROM media.tv_shows WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "library_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "original_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "overview",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "tagline",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "first_air_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_air_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 8,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "poster_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "backdrop_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "vote_average",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 12,
+        "name": "vote_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 13,
+        "name": "genres",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 14,
+        "name": "networks",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 15,
+        "name": "season_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 16,
+        "name": "episode_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 17,
+        "name": "original_language",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 18,
+        "name": "cast_json",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 19,
+        "name": "crew_json",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 20,
+        "name": "meta_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 21,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 22,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "eb1f90892a0bfc9fff795d02406c5b7ddd548abadbc161f44fe7e6a0f64d98ee"
+}

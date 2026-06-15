@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH ranked AS (\n               SELECT ctid, ROW_NUMBER() OVER (ORDER BY position) AS rn\n               FROM media.playlist_tracks WHERE playlist_id = $1\n           )\n           UPDATE media.playlist_tracks pt SET position = r.rn\n           FROM ranked r WHERE pt.ctid = r.ctid",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3a878c9b0f9da911e8a94e8ca85ee5df45483d37c8d1752306f609302a5f6eaf"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.albums\n           SET track_count   = (SELECT COUNT(*)    FROM media.tracks WHERE album_id = media.albums.id),\n               duration_secs = COALESCE((SELECT SUM(duration_secs) FROM media.tracks WHERE album_id = media.albums.id), 0)\n           WHERE library_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "45de814309688d3d3707b41d2202d57fc781541bba6e9a3ea49eecbb9d28f2f4"
+}

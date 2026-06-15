@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.title, t.track_number, t.duration_secs, t.codec, t.bitrate,\n                  t.play_count, t.lyrics, t.album_id, t.artist_id,\n                  al.title AS album_title, al.cover_path,\n                  ar.name AS artist_name\n           FROM media.tracks t\n           LEFT JOIN media.albums  al ON al.id = t.album_id\n           LEFT JOIN media.artists ar ON ar.id = t.artist_id\n           WHERE t.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "track_number",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "codec",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "bitrate",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "play_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "lyrics",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "album_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "artist_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "album_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "cover_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "artist_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "cd3dea71363feb96c7e5b720bf21476a19d8dcdde3b81555b7d78ab8d5b8b1a2"
+}

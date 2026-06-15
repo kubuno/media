@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.artists\n           SET track_count = (SELECT COUNT(*) FROM media.tracks WHERE artist_id = media.artists.id),\n               album_count = (SELECT COUNT(DISTINCT album_id) FROM media.tracks\n                              WHERE artist_id = media.artists.id AND album_id IS NOT NULL)\n           WHERE library_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a603236df0721b293deb59b19a24742cf1c110546e52f6968623b4fc64162f90"
+}

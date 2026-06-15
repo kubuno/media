@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.tv_shows\n           SET season_count  = (SELECT COUNT(*) FROM media.tv_seasons WHERE show_id = $1),\n               episode_count = (SELECT COUNT(*) FROM media.tv_episodes WHERE show_id = $1)\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec22bb952b4c1461bb342592491a38ef74d788124df57c7ce2b4e809d70ec65d"
+}
