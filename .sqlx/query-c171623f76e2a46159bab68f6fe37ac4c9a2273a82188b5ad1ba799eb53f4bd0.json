@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.albums (library_id, artist_id, title) VALUES ($1,$2,$3)\n                   ON CONFLICT (library_id, artist_id, lower(title))\n                       WHERE artist_id IS NOT NULL\n                   DO UPDATE SET title = EXCLUDED.title\n                   RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c171623f76e2a46159bab68f6fe37ac4c9a2273a82188b5ad1ba799eb53f4bd0"
+}
