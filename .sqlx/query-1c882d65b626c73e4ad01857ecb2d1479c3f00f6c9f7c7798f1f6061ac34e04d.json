@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO media.artists (library_id, name) VALUES ($1, $2) RETURNING id",
+  "query": "INSERT INTO media.artists (library_id, name) VALUES ($1, $2)\n               ON CONFLICT (library_id, lower(name)) DO UPDATE SET name = EXCLUDED.name\n               RETURNING id",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       false
     ]
   },
-  "hash": "a47ffa86e155209129dc810217ee74c1f64d0c49062f24cd99b5beabc8d4c945"
+  "hash": "1c882d65b626c73e4ad01857ecb2d1479c3f00f6c9f7c7798f1f6061ac34e04d"
 }
