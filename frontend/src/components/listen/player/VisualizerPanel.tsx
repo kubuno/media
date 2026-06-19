@@ -4,163 +4,130 @@ import { audioEngine } from '../../../store/audioEngine'
 type Theme = 'bars' | 'waveform' | 'circular' | 'mirror'
 
 const THEMES: { id: Theme; label: string }[] = [
-  { id: 'bars',     label: 'Barres'    },
-  { id: 'waveform', label: 'Onde'      },
-  { id: 'circular', label: 'Circulaire'},
-  { id: 'mirror',   label: 'Miroir'    },
+  { id: 'bars',     label: 'Barres'     },
+  { id: 'waveform', label: 'Onde'       },
+  { id: 'circular', label: 'Circulaire' },
+  { id: 'mirror',   label: 'Miroir'     },
 ]
 
-const THEME_COLORS: Record<Theme, { bg: string; fill: string; stroke: string }> = {
-  bars:     { bg: '#0f0f1a', fill: '#1a73e8',  stroke: '#1a73e8' },
-  waveform: { bg: '#0a1a0a', fill: '#1e8e3e',  stroke: '#34d058' },
-  circular: { bg: '#1a0a1a', fill: '#9c27b0',  stroke: '#ce93d8' },
-  mirror:   { bg: '#1a0f00', fill: '#f9ab00',  stroke: '#fcd34d' },
+// Unified blue → violet → fuchsia palette, matching the player's progress bar.
+const C = { blue: '#3b82f6', violet: '#8b5cf6', fuchsia: '#ec4899' }
+
+/** Vertical gradient (top → bottom) reused across themes. */
+function vgrad(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1)
+  g.addColorStop(0,   C.fuchsia)
+  g.addColorStop(0.5, C.violet)
+  g.addColorStop(1,   C.blue)
+  return g
 }
 
-function drawBars(
-  ctx: CanvasRenderingContext2D,
-  data: Uint8Array,
-  w: number,
-  h: number,
-  colors: typeof THEME_COLORS['bars'],
-) {
-  ctx.fillStyle = colors.bg
-  ctx.fillRect(0, 0, w, h)
-
-  const barCount = 64
-  const step  = Math.floor(data.length / barCount)
-  const barW  = w / barCount
-  const gap   = Math.max(1, barW * 0.15)
-
+function drawBars(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number, h: number) {
+  const barCount = 48
+  const step = Math.floor(data.length / barCount)
+  const slot = w / barCount
+  const bw   = Math.max(2, slot * 0.6)
+  ctx.shadowColor = C.violet
+  ctx.shadowBlur  = 10
   for (let i = 0; i < barCount; i++) {
-    const val    = data[i * step] / 255
-    const barH   = val * h * 0.9
-    const x      = i * barW + gap / 2
-    const bw     = barW - gap
-
-    const grad = ctx.createLinearGradient(0, h - barH, 0, h)
-    grad.addColorStop(0, colors.stroke)
-    grad.addColorStop(1, colors.fill + '88')
-    ctx.fillStyle = grad
+    const val  = data[i * step] / 255
+    const barH = Math.max(bw, val * h * 0.92)
+    const x    = i * slot + (slot - bw) / 2
+    const y    = h - barH
+    ctx.fillStyle = vgrad(ctx, 0, y, 0, h)
     ctx.beginPath()
-    ctx.roundRect(x, h - barH, bw, barH, [3, 3, 0, 0])
+    ctx.roundRect(x, y, bw, barH, bw / 2)
     ctx.fill()
+    // Soft reflection under the baseline.
+    ctx.globalAlpha = 0.12
+    ctx.beginPath()
+    ctx.roundRect(x, h, bw, Math.min(barH * 0.4, h * 0.18), bw / 2)
+    ctx.fill()
+    ctx.globalAlpha = 1
   }
+  ctx.shadowBlur = 0
 }
 
-function drawWaveform(
-  ctx: CanvasRenderingContext2D,
-  data: Uint8Array,
-  w: number,
-  h: number,
-  colors: typeof THEME_COLORS['waveform'],
-  _time: DOMHighResTimeStamp,
-) {
-  ctx.fillStyle = colors.bg
-  ctx.fillRect(0, 0, w, h)
-
-  ctx.strokeStyle = colors.stroke
-  ctx.lineWidth   = 2
-  ctx.shadowColor = colors.stroke
-  ctx.shadowBlur  = 8
+function drawWaveform(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number, h: number) {
+  ctx.lineWidth   = 2.5
+  ctx.lineJoin    = 'round'
+  ctx.strokeStyle = vgrad(ctx, 0, 0, w, 0)
+  ctx.shadowColor = C.violet
+  ctx.shadowBlur  = 12
   ctx.beginPath()
-
   const sliceW = w / data.length
   let x = 0
   for (let i = 0; i < data.length; i++) {
     const v = data[i] / 128 - 1
-    const y = (v * h * 0.4) + h / 2
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
+    const y = v * h * 0.4 + h / 2
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
     x += sliceW
   }
   ctx.stroke()
+  // Faint filled area under the curve.
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath()
   ctx.shadowBlur = 0
+  ctx.globalAlpha = 0.10
+  ctx.fillStyle = vgrad(ctx, 0, 0, 0, h)
+  ctx.fill()
+  ctx.globalAlpha = 1
 }
 
-function drawCircular(
-  ctx: CanvasRenderingContext2D,
-  data: Uint8Array,
-  w: number,
-  h: number,
-  colors: typeof THEME_COLORS['circular'],
-  _time: DOMHighResTimeStamp,
-) {
-  ctx.fillStyle = colors.bg
-  ctx.fillRect(0, 0, w, h)
-
-  const cx    = w / 2
-  const cy    = h / 2
-  const r     = Math.min(w, h) * 0.3
-  const count = 128
+function drawCircular(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number, h: number) {
+  const cx = w / 2, cy = h / 2
+  const r  = Math.min(w, h) * 0.26
+  const count = 96
   const step  = Math.floor(data.length / count)
-
-  ctx.strokeStyle = colors.stroke
-  ctx.lineWidth   = 2
-  ctx.shadowColor = colors.stroke
-  ctx.shadowBlur  = 6
-
+  ctx.lineWidth   = Math.max(2, (Math.PI * 2 * r) / count * 0.5)
+  ctx.lineCap     = 'round'
+  ctx.shadowColor = C.fuchsia
+  ctx.shadowBlur  = 8
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 - Math.PI / 2
     const val   = data[i * step] / 255
-    const inner = r
-    const outer = r + val * r * 0.7
-
+    const outer = r + val * r * 1.1
+    const t = i / count
+    ctx.strokeStyle = t < 0.5 ? C.violet : C.fuchsia
     ctx.beginPath()
-    ctx.moveTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner)
+    ctx.moveTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r)
     ctx.lineTo(cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer)
     ctx.stroke()
   }
-
-  // Center circle
   ctx.beginPath()
-  ctx.arc(cx, cy, r * 0.85, 0, Math.PI * 2)
-  ctx.strokeStyle = colors.fill + '66'
-  ctx.lineWidth   = 1
+  ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'
+  ctx.lineWidth = 1
+  ctx.shadowBlur = 0
   ctx.stroke()
-  ctx.shadowBlur  = 0
 }
 
-function drawMirror(
-  ctx: CanvasRenderingContext2D,
-  data: Uint8Array,
-  w: number,
-  h: number,
-  colors: typeof THEME_COLORS['mirror'],
-) {
-  ctx.fillStyle = colors.bg
-  ctx.fillRect(0, 0, w, h)
-
-  const barCount = 48
-  const step     = Math.floor(data.length / barCount)
-  const barW     = w / barCount
-  const gap      = Math.max(1, barW * 0.1)
-  const mid      = h / 2
-
+function drawMirror(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number, h: number) {
+  const barCount = 40
+  const step = Math.floor(data.length / barCount)
+  const slot = w / barCount
+  const bw   = Math.max(2, slot * 0.55)
+  const mid  = h / 2
+  ctx.shadowColor = C.violet
+  ctx.shadowBlur  = 8
   for (let i = 0; i < barCount; i++) {
     const val  = data[i * step] / 255
-    const barH = val * mid * 0.9
-    const x    = i * barW + gap / 2
-    const bw   = barW - gap
-
-    const grad = ctx.createLinearGradient(0, mid - barH, 0, mid + barH)
-    grad.addColorStop(0,   colors.stroke)
-    grad.addColorStop(0.5, colors.fill)
-    grad.addColorStop(1,   colors.stroke)
-    ctx.fillStyle = grad
-
+    const barH = Math.max(bw / 2, val * mid * 0.92)
+    const x    = i * slot + (slot - bw) / 2
+    const g = ctx.createLinearGradient(0, mid - barH, 0, mid + barH)
+    g.addColorStop(0,   C.fuchsia)
+    g.addColorStop(0.5, C.violet)
+    g.addColorStop(1,   C.fuchsia)
+    ctx.fillStyle = g
     ctx.beginPath()
-    ctx.roundRect(x, mid - barH, bw, barH, [3, 3, 0, 0])
-    ctx.fill()
-    ctx.beginPath()
-    ctx.roundRect(x, mid, bw, barH, [0, 0, 3, 3])
+    ctx.roundRect(x, mid - barH, bw, barH * 2, bw / 2)
     ctx.fill()
   }
+  ctx.shadowBlur = 0
 }
 
 export function VisualizerPanel() {
-  const canvasRef   = useRef<HTMLCanvasElement>(null)
-  const animRef     = useRef<number>(0)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const animRef   = useRef<number>(0)
   const [theme, setTheme] = useState<Theme>('bars')
 
   useEffect(() => {
@@ -170,40 +137,39 @@ export function VisualizerPanel() {
     if (!ctx) return
 
     const analyser = audioEngine.getAnalyser()
-    let data: Uint8Array<ArrayBuffer>
-
-    if (analyser) {
-      data = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>
-    } else {
-      data = new Uint8Array(1024).fill(128) as Uint8Array<ArrayBuffer>
-    }
-
-    const colors = THEME_COLORS[theme]
+    const data: Uint8Array<ArrayBuffer> = analyser
+      ? (new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>)
+      : (new Uint8Array(1024).fill(128) as Uint8Array<ArrayBuffer>)
 
     const draw = (t: DOMHighResTimeStamp) => {
-      const w = canvas.width
-      const h = canvas.height
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      // Keep the backing store crisp on HiDPI screens.
+      const bw = Math.round(w * dpr), bh = Math.round(h * dpr)
+      if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      // Paint our own dark background so the canvas is never transparent/white,
+      // independent of any CSS behind it.
+      const bg = ctx.createLinearGradient(0, 0, 0, h)
+      bg.addColorStop(0, '#1e1b4b')
+      bg.addColorStop(1, '#0b1020')
+      ctx.fillStyle = bg
+      ctx.fillRect(0, 0, w, h)
 
       if (analyser) {
-        if (theme === 'waveform') {
-          analyser.getByteTimeDomainData(data)
-        } else {
-          analyser.getByteFrequencyData(data)
-        }
+        if (theme === 'waveform') analyser.getByteTimeDomainData(data)
+        else analyser.getByteFrequencyData(data)
       } else {
-        // Idle animation: gentle sine
-        for (let i = 0; i < data.length; i++) {
-          data[i] = 128 + 10 * Math.sin(t / 500 + i / 10)
-        }
+        for (let i = 0; i < data.length; i++) data[i] = 128 + 24 * Math.sin(t / 600 + i / 12)
       }
 
       switch (theme) {
-        case 'bars':     drawBars(ctx, data, w, h, colors); break
-        case 'waveform': drawWaveform(ctx, data, w, h, colors, t); break
-        case 'circular': drawCircular(ctx, data, w, h, colors, t); break
-        case 'mirror':   drawMirror(ctx, data, w, h, colors); break
+        case 'bars':     drawBars(ctx, data, w, h); break
+        case 'waveform': drawWaveform(ctx, data, w, h); break
+        case 'circular': drawCircular(ctx, data, w, h); break
+        case 'mirror':   drawMirror(ctx, data, w, h); break
       }
-
       animRef.current = requestAnimationFrame(draw)
     }
 
@@ -211,33 +177,21 @@ export function VisualizerPanel() {
     return () => cancelAnimationFrame(animRef.current)
   }, [theme])
 
-  // Resize canvas to match CSS size
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ro = new ResizeObserver(() => {
-      canvas.width  = canvas.clientWidth
-      canvas.height = canvas.clientHeight
-    })
-    ro.observe(canvas)
-    canvas.width  = canvas.clientWidth
-    canvas.height = canvas.clientHeight
-    return () => ro.disconnect()
-  }, [])
-
   return (
-    <div className="flex flex-col h-full border-r border-border/50 bg-[#0f0f1a] select-none"
-         style={{ width: 200 }}>
-      {/* Theme selector */}
-      <div className="flex flex-wrap gap-1 p-2 border-b border-white/10">
+    <div
+      className="flex flex-col h-full select-none"
+      style={{ width: 280, background: 'radial-gradient(120% 80% at 50% 0%, #1e1b4b 0%, #0b1020 70%)' }}
+    >
+      {/* Mode selector — segmented pills */}
+      <div className="grid grid-cols-2 gap-1 p-2">
         {THEMES.map(t => (
           <button
             key={t.id}
             onClick={() => setTheme(t.id)}
-            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+            className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
               theme === t.id
-                ? 'bg-primary text-white'
-                : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white/90'
+                ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/15'
+                : 'text-white/45 hover:text-white/80 hover:bg-white/5'
             }`}
           >
             {t.label}
@@ -245,13 +199,10 @@ export function VisualizerPanel() {
         ))}
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 relative overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-          style={{ imageRendering: 'pixelated' }}
-        />
+      {/* Canvas — fills the container (explicit w/h so it never falls back to the
+          intrinsic 300×150) and paints its own background each frame. */}
+      <div className="flex-1 relative overflow-hidden min-h-0">
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       </div>
     </div>
   )

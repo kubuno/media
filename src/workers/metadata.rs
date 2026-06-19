@@ -344,7 +344,7 @@ async fn enrich_show_tvmaze(
 
     // If seasons_meta was empty (shouldn't happen but just in case), fall back to episode-derived seasons
     if seasons_meta.is_empty() {
-        if let Some(ref episodes) = show.embedded.as_ref().and_then(|e| e.episodes.as_ref()) {
+        if let Some(episodes) = show.embedded.as_ref().and_then(|e| e.episodes.as_ref()) {
             let season_numbers: Vec<i32> = episodes
                 .iter()
                 .map(|e| e.season)

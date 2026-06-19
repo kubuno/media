@@ -44,6 +44,7 @@ export function register() {
   const MovieDetailPage = lazy(() => import('./pages/MovieDetailPage'))
   const ListenPage      = lazy(() => import('./pages/ListenPage'))
   const DJPage          = lazy(() => import('./pages/DJPage'))
+  const RadioPage       = lazy(() => import('./pages/RadioPage'))
 
   RouteRegistry.register('media/watch',                WatchPage)
   RouteRegistry.register('media/watch/shows',          WatchPage)
@@ -59,4 +60,5 @@ export function register() {
   RouteRegistry.register('media/listen/album/:id',     ListenPage)
   RouteRegistry.register('media/listen/playlist/:id',  ListenPage)
   RouteRegistry.register('media/listen/dj',            DJPage)
+  RouteRegistry.register('media/listen/radio',         RadioPage)
 }

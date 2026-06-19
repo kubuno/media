@@ -9,3 +9,4 @@ pub mod playlists;
 pub mod progress;
 pub mod search;
 pub mod admin;
+pub mod radio;

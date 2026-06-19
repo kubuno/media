@@ -18,6 +18,29 @@ pub async fn list_artists(
     .fetch_all(&state.db)
     .await?;
 
+    // Backfill missing artist photos from Deezer in the background so the grid
+    // fills in on a later load without blocking this response.
+    let missing: Vec<(Uuid, String)> = rows
+        .iter()
+        .filter(|r| r.image_path.is_none())
+        .take(30)
+        .map(|r| (r.id, r.name.clone()))
+        .collect();
+    if !missing.is_empty() {
+        let db = state.db.clone();
+        tokio::spawn(async move {
+            for (id, name) in missing {
+                if let Some(url) = crate::services::deezer::artist_image(&name).await {
+                    let _ = sqlx::query("UPDATE media.artists SET image_path = $1 WHERE id = $2 AND image_path IS NULL")
+                        .bind(&url)
+                        .bind(id)
+                        .execute(&db)
+                        .await;
+                }
+            }
+        });
+    }
+
     let artists: Vec<Value> = rows.into_iter().map(|r| json!({
         "id":          r.id,
         "name":        r.name,
@@ -62,11 +85,24 @@ pub async fn get_artist(
     .fetch_all(&state.db)
     .await?;
 
+    // No local photo? Fetch one from Deezer (free, key-less) and cache it.
+    let mut image_path = artist.image_path.clone();
+    if image_path.is_none() {
+        if let Some(url) = crate::services::deezer::artist_image(&artist.name).await {
+            let _ = sqlx::query("UPDATE media.artists SET image_path = $1 WHERE id = $2")
+                .bind(&url)
+                .bind(id)
+                .execute(&state.db)
+                .await;
+            image_path = Some(url);
+        }
+    }
+
     Ok(Json(json!({
         "id":          artist.id,
         "name":        artist.name,
         "biography":   artist.biography,
-        "image_path":  artist.image_path,
+        "image_path":  image_path,
         "genres":      artist.genres,
         "country":     artist.country,
         "artist_type": artist.artist_type,

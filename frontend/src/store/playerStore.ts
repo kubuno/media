@@ -8,6 +8,8 @@ export interface PlayerTrack {
   coverUrl?:     string
   durationSecs:  number
   streamUrl?:    string
+  /** Live internet radio: no seek/duration, shows a LIVE badge. */
+  isRadio?:      boolean
 }
 
 export type RepeatMode = 'none' | 'all' | 'one'
@@ -24,11 +26,16 @@ interface PlayerState {
   isMinimized:   boolean
   shuffle:       boolean
   repeatMode:    RepeatMode
+  playbackRate:  number
+  /** Crossfade duration in seconds (0 = off). */
+  crossfadeSecs: number
 
   playTrack:       (track: PlayerTrack, queue?: PlayerTrack[], index?: number) => void
   togglePlay:      () => void
   seek:            (secs: number) => void
   setVolume:       (v: number) => void
+  setPlaybackRate: (r: number) => void
+  setCrossfade:    (secs: number) => void
   next:            () => void
   prev:            () => void
   toggleShuffle:   () => void
@@ -49,25 +56,58 @@ interface PlayerState {
   _onEnded:     () => void
 }
 
-// ── Singleton audio element ───────────────────────────────────────────────────
+// ── Dual audio elements (A primary, B for crossfade) ──────────────────────────
+// Two elements let one track fade out while the next fades in. `audio` keeps its
+// historical name (== element A) for backward-compatible imports.
 
-export const audio = new Audio()
-audio.preload = 'auto'
+export const audio  = new Audio()
+export const audioB = new Audio()
+audio.preload  = 'auto'
+audioB.preload = 'auto'
+
+/** Currently audible element. Swaps to the other one after each crossfade. */
+let activeEl: HTMLAudioElement = audio
+const inactiveEl = (): HTMLAudioElement => (activeEl === audio ? audioB : audio)
+
+// ── Crossfade controller (module-level, isolated from React) ──────────────────
+
+const xf = {
+  active:   false,
+  outgoing: null as HTMLAudioElement | null,
+  incoming: null as HTMLAudioElement | null,
+  // Target the crossfade resolves to (works for auto-advance AND manual switches).
+  track:    null as PlayerTrack | null,
+  queue:    null as PlayerTrack[] | null,
+  index:    -1,
+  raf: 0,
+}
+function stopXfRamp() { if (xf.raf) cancelAnimationFrame(xf.raf); xf.raf = 0 }
+/** Abort an in-flight crossfade (e.g. user picked another track / seeked). */
+function cancelCrossfade() {
+  if (!xf.active) return
+  stopXfRamp()
+  if (xf.incoming) { try { xf.incoming.pause() } catch { /* ignore */ } xf.incoming.src = ''; xf.incoming.volume = 0 }
+  xf.active = false; xf.outgoing = null; xf.incoming = null; xf.track = null; xf.queue = null; xf.index = -1
+}
 
 // ── Session persistence ───────────────────────────────────────────────────────
 
 const SESSION_KEY = 'kubuno:player'
 
 type Snapshot = {
-  track:       PlayerTrack
-  queue:       PlayerTrack[]
-  queueIndex:  number
-  position:    number
-  volume:      number
-  isVisible:   boolean
-  isMinimized: boolean
-  shuffle:     boolean
-  repeatMode:  RepeatMode
+  track:        PlayerTrack
+  queue:        PlayerTrack[]
+  queueIndex:   number
+  position:     number
+  volume:       number
+  isVisible:    boolean
+  isMinimized:  boolean
+  shuffle:      boolean
+  repeatMode:   RepeatMode
+  /** Was playback active when the snapshot was taken? Drives auto-resume. */
+  wasPlaying?:   boolean
+  playbackRate?: number
+  crossfadeSecs?: number
 }
 
 function loadSnapshot(): Snapshot | null {
@@ -81,60 +121,220 @@ function saveSnapshot(snap: Snapshot) {
   try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(snap)) } catch {}
 }
 
-// Restore audio element src before store creation so it starts buffering early
+// Restore audio element src before store creation so it starts buffering early.
 const _snap = loadSnapshot()
 if (_snap?.track) {
-  audio.src    = _snap.track.streamUrl ?? `/api/v1/media/audio/${_snap.track.id}/stream`
-  audio.volume = _snap.volume ?? 1
+  audio.src          = _snap.track.streamUrl ?? `/api/v1/media/audio/${_snap.track.id}/stream`
+  audio.volume       = _snap.volume ?? 1
+  audio.playbackRate = _snap.playbackRate ?? 1
+  // Kick off loading immediately so metadata/duration are ready for the seek.
+  audio.load()
 }
+
+/** If autoplay is blocked (no user gesture after reload), resume on the first
+ *  user interaction anywhere on the page — a one-shot, self-removing listener. */
+function armResumeOnGesture() {
+  const resume = () => {
+    activeEl.play().catch(() => {})
+    window.removeEventListener('pointerdown', resume)
+    window.removeEventListener('keydown', resume)
+  }
+  window.addEventListener('pointerdown', resume, { once: true })
+  window.addEventListener('keydown', resume, { once: true })
+}
+
+// Assigned once the store is created; lets actions persist after state changes.
+let _persist: () => void = () => {}
+let _lastPosSave = 0
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
 export const usePlayerStore = create<PlayerState>((set, get) => {
-  // Wire audio events
-  audio.addEventListener('timeupdate',     () => get()._setPosition(audio.currentTime))
-  audio.addEventListener('durationchange', () => {
-    if (isFinite(audio.duration)) get()._setDuration(audio.duration)
-  })
-  audio.addEventListener('ended', () => get()._onEnded())
-  audio.addEventListener('error', () => set({ isPlaying: false }))
-  // Keep isPlaying in sync with actual audio state
-  audio.addEventListener('play',  () => set({ isPlaying: true  }))
-  audio.addEventListener('pause', () => set({ isPlaying: false }))
+  // ── Crossfade helpers (need get/set; defined inside the closure) ──
+  const computeNextIndex = (): number => {
+    const { queue, queueIndex, shuffle, repeatMode } = get()
+    if (queue.length === 0) return -1
+    if (shuffle) {
+      if (queue.length === 1) return repeatMode === 'all' ? 0 : -1
+      let i: number
+      do { i = Math.floor(Math.random() * queue.length) } while (i === queueIndex)
+      return i
+    }
+    const n = queueIndex + 1
+    if (n < queue.length) return n
+    return repeatMode === 'all' ? 0 : -1
+  }
 
-  // Save state just before the page is unloaded (F5 / tab close)
-  window.addEventListener('beforeunload', () => {
+  const finalizeCrossfade = () => {
+    if (!xf.active) return
+    stopXfRamp()
+    const out = xf.outgoing!, inc = xf.incoming!
+    const { track, queue, index } = xf
+    const st  = get()
+    activeEl = inc
+    inc.volume = st.volume
+    try { out.pause() } catch { /* ignore */ }
+    out.src = ''
+    out.volume = st.volume
+    xf.active = false; xf.outgoing = null; xf.incoming = null; xf.track = null; xf.queue = null; xf.index = -1
+    set({
+      currentTrack: track ?? st.currentTrack,
+      queue:        queue ?? st.queue,
+      queueIndex:   index,
+      isPlaying:    true,
+      position:     inc.currentTime,
+      duration:     track?.durationSecs ?? (isFinite(inc.duration) ? inc.duration : 0),
+    })
+    _persist()
+  }
+
+  /** Generic crossfade to an explicit track — used for BOTH automatic
+   *  end-of-track transitions and manual switches (next/prev/track click).
+   *  Time-based ramp (performance.now) so it works mid-track, not just near the end. */
+  const crossfadeTo = (track: PlayerTrack, queue: PlayerTrack[], index: number, fadeSecs: number) => {
+    const st  = get()
+    const out = activeEl
+    const inc = inactiveEl()
+    inc.src          = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
+    inc.playbackRate = st.playbackRate
+    inc.volume       = 0
+    try { inc.currentTime = 0 } catch { /* ignore */ }
+    inc.play().catch(() => {})
+    xf.active = true; xf.outgoing = out; xf.incoming = inc; xf.track = track; xf.queue = queue; xf.index = index
+    set({ isVisible: true })
+    const t0 = performance.now()
+    const ramp = () => {
+      if (!xf.active) return
+      const vol = get().volume
+      const p = Math.max(0, Math.min(1, (performance.now() - t0) / (fadeSecs * 1000)))
+      // Equal-power crossfade → constant perceived loudness through the blend.
+      out.volume = Math.cos(p * Math.PI / 2) * vol
+      inc.volume = Math.sin(p * Math.PI / 2) * vol
+      // Finish on time, or early if the outgoing track reaches its natural end.
+      if (p >= 1 || (isFinite(out.duration) && out.currentTime >= out.duration - 0.05)) {
+        finalizeCrossfade()
+        return
+      }
+      xf.raf = requestAnimationFrame(ramp)
+    }
+    xf.raf = requestAnimationFrame(ramp)
+  }
+
+  // Auto end-of-track transition (queue unchanged).
+  const beginCrossfade = (nextIndex: number, fadeSecs: number) => {
+    const q = get().queue
+    if (!q[nextIndex]) return
+    crossfadeTo(q[nextIndex], q, nextIndex, fadeSecs)
+  }
+
+  // Abrupt load (no fade) — used when nothing is playing, crossfade is off, or the
+  // previous track already ended (auto-advance) so there's no audio to blend.
+  const loadAndPlay = (track: PlayerTrack, queue: PlayerTrack[], index: number) => {
+    cancelCrossfade()
+    const el = activeEl
+    el.src          = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
+    el.volume       = get().volume
+    el.playbackRate = get().playbackRate
+    el.play().catch(() => {})
+    set({
+      currentTrack: track,
+      queue,
+      queueIndex: index,
+      isPlaying: true,
+      position: 0,
+      duration: track.durationSecs,
+      isVisible: true,
+      isMinimized: get().isMinimized,
+    })
+    _persist()
+  }
+
+  const maybeStartCrossfade = (el: HTMLAudioElement) => {
+    if (xf.active) return
+    const st = get()
+    if (st.crossfadeSecs <= 0) return
+    if (!st.currentTrack || st.currentTrack.isRadio) return
+    if (st.repeatMode === 'one') return
+    const dur = el.duration
+    if (!isFinite(dur) || dur <= 0) return
+    const remaining = dur - el.currentTime
+    if (remaining > st.crossfadeSecs || remaining <= 0.08) return
+    const nextIndex = computeNextIndex()
+    if (nextIndex < 0) return
+    beginCrossfade(nextIndex, Math.min(st.crossfadeSecs, dur / 2))
+  }
+
+  // ── Wire events on BOTH elements; UI only follows the active one ──
+  const onEnded = (el: HTMLAudioElement) => {
+    if (xf.active && el === xf.outgoing) { finalizeCrossfade(); return }
+    if (el !== activeEl) return
+    get()._onEnded()
+  }
+  const wire = (el: HTMLAudioElement) => {
+    el.addEventListener('timeupdate', () => {
+      if (el !== activeEl) return
+      get()._setPosition(el.currentTime)
+      maybeStartCrossfade(el)
+    })
+    el.addEventListener('durationchange', () => {
+      if (el === activeEl && isFinite(el.duration)) get()._setDuration(el.duration)
+    })
+    el.addEventListener('ended', () => onEnded(el))
+    el.addEventListener('error', () => { if (el === activeEl) set({ isPlaying: false }) })
+    el.addEventListener('play',  () => { if (el === activeEl) { set({ isPlaying: true  }); _persist() } })
+    el.addEventListener('pause', () => { if (el === activeEl && !xf.active) { set({ isPlaying: false }); _persist() } })
+  }
+  wire(audio)
+  wire(audioB)
+
+  // Persist the full playback state. Called on every meaningful change (not just
+  // `beforeunload`, which is unreliable on mobile / forced reloads) so the saved
+  // position stays fresh and F5 resumes accurately.
+  const persist = () => {
     const st = get()
     if (st.currentTrack) {
       saveSnapshot({
-        track:       st.currentTrack,
-        queue:       st.queue,
-        queueIndex:  st.queueIndex,
-        position:    st.position,
-        volume:      st.volume,
-        isVisible:   st.isVisible,
-        isMinimized: st.isMinimized,
-        shuffle:     st.shuffle,
-        repeatMode:  st.repeatMode,
+        track:         st.currentTrack,
+        queue:         st.queue,
+        queueIndex:    st.queueIndex,
+        position:      st.position,
+        volume:        st.volume,
+        isVisible:     st.isVisible,
+        isMinimized:   st.isMinimized,
+        shuffle:       st.shuffle,
+        repeatMode:    st.repeatMode,
+        wasPlaying:    st.isPlaying,
+        playbackRate:  st.playbackRate,
+        crossfadeSecs: st.crossfadeSecs,
       })
     } else {
       try { sessionStorage.removeItem(SESSION_KEY) } catch {}
     }
-  })
+  }
+  window.addEventListener('beforeunload', persist)
+  // Also persist whenever the tab is hidden (covers mobile / tab-close where
+  // `beforeunload` may not fire).
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') persist() })
+  _persist = persist
 
-  // Restore playback after the store is fully initialised (next tick)
+  // Restore playback after the store is fully initialised (next tick).
   if (_snap?.track) {
-    const savedPos = _snap.position ?? 0
+    const savedPos   = _snap.position ?? 0
+    const wasRadio   = _snap.track.isRadio === true
+    const wasPlaying = _snap.wasPlaying !== false   // default to resuming for legacy snapshots
     setTimeout(() => {
-      const seekAndPlay = () => {
-        if (savedPos > 0) audio.currentTime = savedPos
-        audio.play().catch(() => {})
+      const restorePos = () => {
+        if (savedPos > 0 && !wasRadio) {
+          try { audio.currentTime = savedPos } catch { /* not yet seekable */ }
+        }
       }
-      if (audio.readyState >= 3) {
-        seekAndPlay()
-      } else {
-        audio.addEventListener('canplay', seekAndPlay, { once: true })
-      }
+      if (audio.readyState >= 1) restorePos()
+      else audio.addEventListener('loadedmetadata', restorePos, { once: true })
+
+      if (!wasPlaying) return
+      const tryPlay = () => { audio.play().catch(() => armResumeOnGesture()) }
+      if (audio.readyState >= 3) tryPlay()
+      else audio.addEventListener('canplay', tryPlay, { once: true })
     }, 0)
   }
 
@@ -150,43 +350,60 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     isMinimized:  _snap?.isMinimized ?? false,
     shuffle:      _snap?.shuffle    ?? false,
     repeatMode:   _snap?.repeatMode ?? 'none',
+    playbackRate: _snap?.playbackRate ?? 1,
+    crossfadeSecs: _snap?.crossfadeSecs ?? 6,
 
     playTrack(track, queue = [track], index = 0) {
-      const src = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
-      audio.src = src
-      audio.volume = get().volume
-      audio.play().catch(() => {})
-      set({
-        currentTrack: track,
-        queue,
-        queueIndex: index,
-        isPlaying: true,
-        position: 0,
-        duration: track.durationSecs,
-        isVisible: true,
-        isMinimized: get().isMinimized,
-      })
+      const st = get()
+      // Smooth (crossfade) when a different track is already playing; otherwise
+      // load instantly. A short fade keeps manual next/clicks responsive.
+      const canFade =
+        st.crossfadeSecs > 0 && !!st.currentTrack && st.isPlaying && !xf.active &&
+        !st.currentTrack.isRadio && !track.isRadio && st.currentTrack.id !== track.id &&
+        activeEl.currentTime < (isFinite(activeEl.duration) ? activeEl.duration - 0.3 : Number.POSITIVE_INFINITY)
+      if (canFade) {
+        crossfadeTo(track, queue, index, Math.min(st.crossfadeSecs, 1.8))
+        return
+      }
+      loadAndPlay(track, queue, index)
+    },
+
+    setPlaybackRate(r) {
+      const rate = Math.max(0.25, Math.min(4, r))
+      audio.playbackRate = rate
+      audioB.playbackRate = rate
+      set({ playbackRate: rate })
+      _persist()
+    },
+
+    setCrossfade(secs) {
+      set({ crossfadeSecs: Math.max(0, Math.min(12, secs)) })
+      _persist()
     },
 
     togglePlay() {
       if (get().isPlaying) {
-        audio.pause()
+        activeEl.pause()
+        if (xf.active && xf.incoming) { try { xf.incoming.pause() } catch { /* ignore */ } }
       } else {
-        audio.play().catch(() => {})
+        activeEl.play().catch(() => {})
+        if (xf.active && xf.incoming) { xf.incoming.play().catch(() => {}) }
       }
     },
 
     seek(secs) {
-      audio.currentTime = secs
+      cancelCrossfade()
+      activeEl.currentTime = secs
       set({ position: secs })
     },
 
     setVolume(v) {
-      audio.volume = v
+      if (!xf.active) activeEl.volume = v
       set({ volume: v })
     },
 
     next() {
+      cancelCrossfade()
       const { queue, queueIndex, shuffle } = get()
       if (queue.length === 0) return
       let nextIndex: number
@@ -203,14 +420,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     prev() {
       const { queue, queueIndex, position } = get()
       if (position > 3) {
-        audio.currentTime = 0
+        activeEl.currentTime = 0
         set({ position: 0 })
       } else {
+        cancelCrossfade()
         const prevIndex = queueIndex - 1
         if (prevIndex >= 0) {
           get().playTrack(queue[prevIndex], queue, prevIndex)
         } else {
-          audio.currentTime = 0
+          activeEl.currentTime = 0
           set({ position: 0 })
         }
       }
@@ -262,19 +480,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     minimize() { set({ isMinimized: true }) },
     restore()  { set({ isMinimized: false }) },
     close() {
-      audio.pause()
-      audio.src = ''
+      cancelCrossfade()
+      audio.pause();  audio.src  = ''
+      audioB.pause(); audioB.src = ''
+      activeEl = audio
       try { sessionStorage.removeItem(SESSION_KEY) } catch {}
       set({ isVisible: false, isMinimized: false, isPlaying: false, currentTrack: null, position: 0 })
     },
 
-    _setPosition: (p) => set({ position: p }),
+    _setPosition: (p) => {
+      set({ position: p })
+      // Throttle persistence to ~once every 5s so the saved position stays fresh
+      // (cheap: sessionStorage write) without thrashing on every timeupdate.
+      const now = performance.now()
+      if (now - _lastPosSave > 5000) { _lastPosSave = now; _persist() }
+    },
     _setDuration: (d) => set({ duration: d }),
     _onEnded() {
       const { queue, queueIndex, repeatMode, shuffle } = get()
       if (repeatMode === 'one') {
-        audio.currentTime = 0
-        audio.play().catch(() => {})
+        activeEl.currentTime = 0
+        activeEl.play().catch(() => {})
         return
       }
       if (shuffle) {

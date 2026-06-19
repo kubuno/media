@@ -28,6 +28,9 @@ pub enum MediaError {
     #[error("FFmpeg/FFprobe indisponible: {0}")]
     Ffmpeg(String),
 
+    #[error("Service amont indisponible: {0}")]
+    Upstream(String),
+
     #[error("Erreur interne")]
     Internal(#[from] anyhow::Error),
 }
@@ -41,6 +44,7 @@ impl IntoResponse for MediaError {
             MediaError::Validation(m) => (StatusCode::UNPROCESSABLE_ENTITY,   "VALIDATION",      m.clone()),
             MediaError::Conflict(m)   => (StatusCode::CONFLICT,               "CONFLICT",        m.clone()),
             MediaError::Ffmpeg(m)     => (StatusCode::SERVICE_UNAVAILABLE,    "FFMPEG_ERROR",    m.clone()),
+            MediaError::Upstream(m)   => (StatusCode::BAD_GATEWAY,            "UPSTREAM_ERROR",  m.clone()),
             MediaError::Storage(m)    => (StatusCode::INTERNAL_SERVER_ERROR,  "STORAGE_ERROR",   m.clone()),
             MediaError::Database(e)   => {
                 tracing::error!(error = %e, "Erreur base de données");

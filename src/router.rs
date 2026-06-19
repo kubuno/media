@@ -6,7 +6,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
     handlers::{
-        admin, albums, artists, libraries, movies, playlists, progress, search, shows, stream, tracks,
+        admin, albums, artists, libraries, movies, playlists, progress, radio, search, shows, stream, tracks,
     },
     middleware::require_auth,
     state::AppState,
@@ -56,6 +56,7 @@ pub fn build(state: AppState) -> Router {
         .route("/albums/:id",             get(albums::get_album))
         // Tracks
         .route("/tracks/:id",             get(tracks::get_track))
+        .route("/tracks/:id/lyrics",      get(tracks::get_lyrics))
         .route("/tracks/:id/like",        post(tracks::toggle_like).get(tracks::like_status))
         .route("/tracks/liked",           get(tracks::liked_tracks))
         .route("/tracks/recently-played", get(tracks::recently_played))
@@ -68,6 +69,16 @@ pub fn build(state: AppState) -> Router {
         .route("/progress/:item_type/:item_id", get(progress::get_video_progress).post(progress::save_video_progress))
         .route("/listen",                 post(progress::record_listen))
         .route("/listen/history",         get(progress::get_listen_history))
+        // Web radio
+        .route("/radio/stations",         get(radio::list_stations).post(radio::create_station))
+        .route("/radio/stations/:id",     patch(radio::update_station).delete(radio::delete_station))
+        .route("/radio/stations/:id/favorite", post(radio::toggle_favorite))
+        .route("/radio/stations/:id/play",     post(radio::record_play))
+        .route("/radio/tags",             get(radio::list_tags))
+        .route("/radio/favorites",        get(radio::list_favorites))
+        .route("/radio/recent",           get(radio::list_recent))
+        .route("/radio/discover",         get(radio::discover))
+        .route("/radio/stations/:id/stream", get(radio::stream))
         // Search
         .route("/search",                 get(search::search))
         // Admin

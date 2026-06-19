@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Film, Clapperboard, ListMusic,
-  Clock, Heart, PlayCircle, Disc3, Mic2,
+  Clock, Heart, PlayCircle, Disc3, Mic2, Radio,
 } from 'lucide-react'
 import { SidebarNavItem } from '@kubuno/sdk'
 
@@ -29,6 +29,7 @@ const LISTEN_ITEMS = [
   { labelKey: 'media_nav_playlists',    icon: <ListMusic className="w-4 h-4 flex-shrink-0" />,   path: '/media/listen/playlists' },
   { labelKey: 'media_nav_favorites',    icon: <Heart className="w-4 h-4 flex-shrink-0" />,       path: '/media/listen/liked' },
   { labelKey: 'media_nav_recent',       icon: <PlayCircle className="w-4 h-4 flex-shrink-0" />,  path: '/media/listen/recent' },
+  { labelKey: 'media_nav_radio',        icon: <Radio className="w-4 h-4 flex-shrink-0" />,       path: '/media/listen/radio' },
 ]
 
 export default function MediaSidebarBody({ collapsed = false }: { collapsed?: boolean }) {

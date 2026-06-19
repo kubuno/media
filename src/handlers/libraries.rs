@@ -1,10 +1,9 @@
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     Json,
 };
 use kubuno_storage::path::user_folder_dir;
-use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 

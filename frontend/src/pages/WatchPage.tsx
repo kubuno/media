@@ -3,11 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Film, Clapperboard, Clock, Play, Star,
-  Loader2, Film as FilmIcon, Search, ChevronRight, Library,
+  Loader2, Film as FilmIcon, Search, ChevronRight, Library, Bookmark,
 } from 'lucide-react'
 import { mediaApi, posterUrl, formatDuration, type Movie, type TvShow } from '../api'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
-import { Tabs, Button } from '@ui'
+import { Tabs, Button, MenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
 import MovieContextMenu, { type ContextMenuPosition } from '../MovieContextMenu'
 
 // ── Poster card ───────────────────────────────────────────────────────────────
@@ -66,10 +66,18 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
 function ShowCard({ show, onClick }: { show: TvShow; onClick: () => void }) {
   const poster = posterUrl(show.poster_path)
   const year   = show.first_air_date ? new Date(show.first_air_date).getFullYear() : null
+  const [ctx, setCtx] = useState<MenuDropdownPos | null>(null)
+
+  const menuItems: MenuItem[] = [
+    { type: 'action', icon: <Play className="w-4 h-4" />, label: 'Ouvrir', onClick },
+    { type: 'action', icon: <Bookmark className="w-4 h-4" />, label: 'Ajouter à ma liste', onClick: () => { mediaApi.addToWatchlist('show', show.id).catch(() => {}) } },
+  ]
 
   return (
+    <>
     <div
       onClick={onClick}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
       className="group cursor-pointer rounded-xl overflow-hidden bg-surface-1 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
     >
       <div className="aspect-[2/3] bg-surface-2 relative overflow-hidden">
@@ -96,6 +104,8 @@ function ShowCard({ show, onClick }: { show: TvShow; onClick: () => void }) {
         </p>
       </div>
     </div>
+    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    </>
   )
 }
 

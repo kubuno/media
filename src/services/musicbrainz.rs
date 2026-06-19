@@ -33,6 +33,7 @@ pub struct MbLifeSpan {
 #[derive(Debug, Deserialize)]
 struct MbSearchResult<T> {
     artists:  Option<Vec<T>>,
+    #[allow(dead_code)]
     releases: Option<Vec<MbRelease>>,
 }
 

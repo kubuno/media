@@ -43,12 +43,14 @@ export const DEFAULT_EQ: EqState = {
 class AudioEngine {
   private ctx:         AudioContext | null = null
   private source:      MediaElementAudioSourceNode | null = null
+  private sourceB:     MediaElementAudioSourceNode | null = null
   private analyser:    AnalyserNode | null = null
   private filters:     BiquadFilterNode[] = []
   private gainNode:    GainNode | null = null
   private compNode:    DynamicsCompressorNode | null = null
   private panNode:     StereoPannerNode | null = null
   private connected    = false
+  private connectedB   = false
 
   private eq: EqState = { ...DEFAULT_EQ }
 
@@ -110,6 +112,19 @@ class AudioEngine {
       }
     } catch (e) {
       console.warn('AudioEngine: failed to init Web Audio', e)
+    }
+  }
+
+  /** Route a second audio element through the same graph (analyser → EQ → output)
+   *  so crossfade playback keeps the equalizer and visualizer applied. */
+  connectSecondary(audioEl: HTMLAudioElement) {
+    if (this.connectedB || !this.ctx || !this.analyser) return
+    try {
+      this.sourceB = this.ctx.createMediaElementSource(audioEl)
+      this.sourceB.connect(this.analyser)
+      this.connectedB = true
+    } catch (e) {
+      console.warn('AudioEngine: failed to connect secondary element', e)
     }
   }
 

@@ -1,6 +1,6 @@
 [package]
 name        = "kubuno-media"
-version     = "0.1.0"
+version     = "0.1.0-alpha"
 edition     = "2021"
 description = "Kubuno Media — Watch (films/séries) et Listen (musique)"
 license     = "AGPL-3.0"
@@ -40,6 +40,7 @@ toml               = { workspace = true }
 clap               = { workspace = true }
 hex                = { workspace = true }
 tokio-util         = { workspace = true }
+urlencoding        = { workspace = true }
 
 # Lecture des tags audio (ID3, Vorbis, FLAC...)
 id3         = "1"
@@ -68,7 +69,7 @@ bigdecimal  = "0.4"
 [workspace]
 
 [workspace.package]
-version      = "0.1.0"
+version      = "0.1.0-alpha"
 edition      = "2021"
 authors      = ["Kubuno Contributors"]
 license      = "AGPL-3.0"

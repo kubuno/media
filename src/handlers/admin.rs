@@ -61,8 +61,7 @@ pub async fn patch_settings(
 }
 
 // ── POST /media/admin/enrich ──────────────────────────────────────────────────
-/// Remet les films en error_meta → pending_meta et lance l'enrichissement.
-
+// Remet les films en error_meta → pending_meta et lance l'enrichissement.
 pub async fn trigger_enrich(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,

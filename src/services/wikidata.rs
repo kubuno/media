@@ -535,7 +535,7 @@ impl WikidataService {
                 let url = if u.contains("Special:FilePath") {
                     u.clone()
                 } else {
-                    format!("https://commons.wikimedia.org/wiki/Special:FilePath/{}", u.split('/').last().unwrap_or(""))
+                    format!("https://commons.wikimedia.org/wiki/Special:FilePath/{}", u.split('/').next_back().unwrap_or(""))
                 };
                 if !poster_urls.contains(&url) { poster_urls.push(url); }
             }
