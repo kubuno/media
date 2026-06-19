@@ -4,16 +4,31 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Mic2, Disc3, ListMusic, Heart, Play,
   Loader2, Music, Clock, Search, Library, Sliders,
-  Plus, Pencil, Trash2, Globe, Lock, ListPlus,
+  Plus, Pencil, Trash2, Globe, Lock, ListPlus, ListEnd, HeartOff, User, Shuffle, ArrowUpDown,
 } from 'lucide-react'
 import { mediaApi, posterUrl, formatDuration, type Artist, type Album, type Track, type Playlist } from '../api'
-import { Checkbox, Button, Tabs, MenuDropdown, Input, type MenuDropdownPos } from '@ui'
+import { Checkbox, Button, Tabs, MenuDropdown, Input, type MenuDropdownPos, type MenuItem } from '@ui'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
 import { usePlayerStore, type PlayerTrack } from '../store/playerStore'
 import { QUEUE_DRAG_TYPE } from '../components/listen/player/QueuePanel'
 
 function trackToPlayerTrack(t: Track): PlayerTrack {
-  return { id: t.id, title: t.title, durationSecs: t.duration_secs }
+  return {
+    id: t.id,
+    title: t.title,
+    durationSecs: t.duration_secs,
+    coverUrl: posterUrl(t.cover_path ?? null) ?? undefined,
+    artistName: t.artist_name ?? undefined,
+  }
+}
+
+/** Enable shuffle mode and play a randomised copy of the queue from the top. */
+function playShuffled(queue: PlayerTrack[]) {
+  if (queue.length === 0) return
+  const shuffled = [...queue].sort(() => Math.random() - 0.5)
+  const store = usePlayerStore.getState()
+  if (!store.shuffle) store.toggleShuffle()
+  store.playTrack(shuffled[0], shuffled, 0)
 }
 
 function EmptyState({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
@@ -30,9 +45,23 @@ function EmptyState({ icon, title, subtitle }: { icon: React.ReactNode; title: s
 
 function ArtistCard({ artist, onClick }: { artist: Artist; onClick: () => void }) {
   const img = artist.image_path
+  const { playTrack } = usePlayerStore()
+  const [ctx, setCtx] = useState<MenuDropdownPos | null>(null)
+
+  const playArtist = async () => {
+    const data = await mediaApi.getArtist(artist.id)
+    const q: PlayerTrack[] = data.top_tracks.map(t => ({ id: t.id, title: t.title, artistName: data.name, durationSecs: t.duration_secs }))
+    if (q.length) playTrack(q[0], q, 0)
+  }
+
+  const menuItems: MenuItem[] = [
+    { type: 'action', icon: <Play className="w-4 h-4" />, label: 'Lire', onClick: () => { void playArtist() } },
+    { type: 'action', icon: <Mic2 className="w-4 h-4" />, label: "Ouvrir l'artiste", onClick },
+  ]
 
   return (
-    <div onClick={onClick} className="group cursor-pointer text-center">
+    <>
+    <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }} className="group cursor-pointer text-center">
       <div className="aspect-square rounded-full overflow-hidden bg-surface-2 mb-2 relative mx-auto w-full">
         {img
           ? <img src={img} alt={artist.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
@@ -49,6 +78,8 @@ function ArtistCard({ artist, onClick }: { artist: Artist; onClick: () => void }
         {[artist.album_count > 0 ? `${artist.album_count} album${artist.album_count > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ')}
       </p>
     </div>
+    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    </>
   )
 }
 
@@ -56,9 +87,29 @@ function ArtistCard({ artist, onClick }: { artist: Artist; onClick: () => void }
 
 function AlbumCard({ album, onClick }: { album: Album; onClick: () => void }) {
   const cover = album.cover_path ? posterUrl(album.cover_path) : null
+  const navigate = useNavigate()
+  const { playTrack, addTracksToQueue } = usePlayerStore()
+  const [ctx, setCtx] = useState<MenuDropdownPos | null>(null)
+
+  const albumQueue = async (): Promise<PlayerTrack[]> => {
+    const { album: al, tracks } = await mediaApi.getAlbum(album.id)
+    const cv = al.cover_path ? posterUrl(al.cover_path) : null
+    return tracks.map(t => ({ id: t.id, title: t.title, albumTitle: al.title, coverUrl: cv ?? undefined, durationSecs: t.duration_secs }))
+  }
+  const playAlbum = async () => { const q = await albumQueue(); if (q.length) playTrack(q[0], q, 0) }
+  const queueAlbum = async () => { const q = await albumQueue(); if (q.length) addTracksToQueue(q) }
+
+  const menuItems: MenuItem[] = [
+    { type: 'action', icon: <Play className="w-4 h-4" />, label: "Lire l'album", onClick: () => { void playAlbum() } },
+    { type: 'action', icon: <ListPlus className="w-4 h-4" />, label: 'Ajouter à la file', onClick: () => { void queueAlbum() } },
+    { type: 'separator' },
+    { type: 'action', icon: <Disc3 className="w-4 h-4" />, label: "Ouvrir l'album", onClick: onClick },
+    ...(album.artist_id ? [{ type: 'action' as const, icon: <User className="w-4 h-4" />, label: "Aller à l'artiste", onClick: () => navigate(`/media/listen/artist/${album.artist_id}`) }] : []),
+  ]
 
   return (
-    <div onClick={onClick} className="group cursor-pointer rounded-xl overflow-hidden bg-surface-1 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
+    <>
+    <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }} className="group cursor-pointer rounded-xl overflow-hidden bg-surface-1 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
       <div className="aspect-square bg-surface-2 relative overflow-hidden">
         {cover
           ? <img src={cover} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
@@ -77,6 +128,8 @@ function AlbumCard({ album, onClick }: { album: Album; onClick: () => void }) {
         </p>
       </div>
     </div>
+    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    </>
   )
 }
 
@@ -91,16 +144,53 @@ function TrackRow({ track, index, onPlay, onToggleLike, liked, onAddToQueue, pla
   onAddToQueue?: () => void
   playerTrack?: PlayerTrack
 }) {
+  const navigate   = useNavigate()
+  const insertNext = usePlayerStore(s => s.insertNext)
+  const addToQueue = usePlayerStore(s => s.addToQueue)
+  const [ctx, setCtx] = useState<MenuDropdownPos | null>(null)
+
+  // Playlists fetched lazily, only when a context menu is open.
+  const { data: playlists = [] } = useQuery({
+    queryKey: ['media', 'playlists'],
+    queryFn:  mediaApi.getPlaylists,
+    enabled:  ctx !== null,
+  })
+
   const handleDragStart = (e: React.DragEvent) => {
     if (!playerTrack) return
     e.dataTransfer.setData(QUEUE_DRAG_TYPE, JSON.stringify(playerTrack))
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  const addToPlaylist: MenuItem = playlists.length > 0
+    ? {
+        type: 'submenu', label: 'Ajouter à une playlist', icon: <ListPlus className="w-4 h-4" />,
+        items: playlists.map(p => ({
+          type: 'action' as const, label: p.name,
+          onClick: () => { mediaApi.addTracksToPlaylist(p.id, [track.id]).catch(() => {}) },
+        })),
+      }
+    : { type: 'action', label: 'Ajouter à une playlist', icon: <ListPlus className="w-4 h-4" />, disabled: true, onClick: () => {} }
+
+  const menuItems: MenuItem[] = [
+    { type: 'action', icon: <Play className="w-4 h-4" />, label: 'Lire', onClick: onPlay },
+    ...(playerTrack ? [
+      { type: 'action' as const, icon: <ListEnd className="w-4 h-4" />, label: 'Lire ensuite', onClick: () => insertNext(playerTrack) },
+      { type: 'action' as const, icon: <ListPlus className="w-4 h-4" />, label: 'Ajouter à la file', onClick: () => (onAddToQueue ? onAddToQueue() : addToQueue(playerTrack)) },
+    ] : []),
+    addToPlaylist,
+    { type: 'separator' },
+    { type: 'action', icon: liked ? <HeartOff className="w-4 h-4" /> : <Heart className="w-4 h-4" />, label: liked ? 'Retirer des favoris' : 'Ajouter aux favoris', onClick: onToggleLike },
+    ...(track.album_id ? [{ type: 'action' as const, icon: <Disc3 className="w-4 h-4" />, label: "Aller à l'album", onClick: () => navigate(`/media/listen/album/${track.album_id}`) }] : []),
+    ...(track.artist_id ? [{ type: 'action' as const, icon: <User className="w-4 h-4" />, label: "Aller à l'artiste", onClick: () => navigate(`/media/listen/artist/${track.artist_id}`) }] : []),
+  ]
+
   return (
+    <>
     <div
       className="group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-2 transition-colors cursor-pointer"
       onClick={onPlay}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
       draggable={!!playerTrack}
       onDragStart={playerTrack ? handleDragStart : undefined}
     >
@@ -130,6 +220,8 @@ function TrackRow({ track, index, onPlay, onToggleLike, liked, onAddToQueue, pla
         {formatDuration(track.duration_secs)}
       </span>
     </div>
+    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    </>
   )
 }
 
@@ -252,11 +344,14 @@ function PlaylistCard({
 function ArtistsTab() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<'name' | 'albums'>('name')
 
-  const { data: artists = [], isLoading } = useQuery({
+  const { data: artistsRaw = [], isLoading } = useQuery({
     queryKey: ['media', 'artists', search],
     queryFn:  () => mediaApi.getArtists({ q: search || undefined, limit: 100 }),
   })
+  const artists = [...artistsRaw].sort((a, b) =>
+    sort === 'albums' ? (b.album_count ?? 0) - (a.album_count ?? 0) : a.name.localeCompare(b.name))
 
   if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
 
@@ -272,13 +367,16 @@ function ArtistsTab() {
 
   return (
     <div>
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-        <input
-          type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher un artiste…"
-          className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-        />
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher un artiste…"
+            className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+          />
+        </div>
+        <SortSelect value={sort} onChange={v => setSort(v as typeof sort)} options={[['name', 'Nom A→Z'], ['albums', "Nb d'albums"]]} />
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4">
         {artists.map(a => (
@@ -294,11 +392,16 @@ function ArtistsTab() {
 function AlbumsTab() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<'title' | 'year' | 'tracks'>('title')
 
-  const { data: albums = [], isLoading } = useQuery({
+  const { data: albumsRaw = [], isLoading } = useQuery({
     queryKey: ['media', 'albums', search],
     queryFn:  () => mediaApi.getAlbums({ q: search || undefined, limit: 100 }),
   })
+  const albums = [...albumsRaw].sort((a, b) =>
+    sort === 'year'   ? (b.release_year ?? 0) - (a.release_year ?? 0) :
+    sort === 'tracks' ? (b.track_count ?? 0) - (a.track_count ?? 0) :
+                        a.title.localeCompare(b.title))
 
   if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
 
@@ -314,19 +417,39 @@ function AlbumsTab() {
 
   return (
     <div>
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-        <input
-          type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher un album…"
-          className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-        />
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher un album…"
+            className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+          />
+        </div>
+        <SortSelect value={sort} onChange={v => setSort(v as typeof sort)} options={[['title', 'Titre A→Z'], ['year', 'Année'], ['tracks', 'Nb de titres']]} />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
         {albums.map(a => (
           <AlbumCard key={a.id} album={a} onClick={() => navigate(`/media/listen/album/${a.id}`)} />
         ))}
       </div>
+    </div>
+  )
+}
+
+// ── Sort dropdown ─────────────────────────────────────────────────────────────
+
+function SortSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<[string, string]> }) {
+  return (
+    <div className="relative flex items-center">
+      <ArrowUpDown className="absolute left-2.5 w-3.5 h-3.5 text-text-tertiary pointer-events-none" />
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="appearance-none pl-8 pr-7 py-2 bg-surface-2 border border-border rounded-full text-sm text-text-secondary outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
+      >
+        {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+      </select>
     </div>
   )
 }
@@ -569,9 +692,14 @@ function AlbumDetailView({ albumId }: { albumId: string }) {
           <p className="text-sm text-text-secondary">
             {[album.release_year, `${tracks.length} titres`, formatDuration(album.duration_secs)].filter(Boolean).join(' · ')}
           </p>
-          <Button className="mt-4" icon={<Play size={15} fill="white" />} onClick={() => tracks.length > 0 && playTrack(queue[0], queue, 0)}>
-            Lecture
-          </Button>
+          <div className="flex items-center gap-2 mt-4">
+            <Button icon={<Play size={15} fill="white" />} onClick={() => tracks.length > 0 && playTrack(queue[0], queue, 0)}>
+              Lecture
+            </Button>
+            <Button variant="secondary" icon={<Shuffle size={15} />} onClick={() => playShuffled(queue)}>
+              Aléatoire
+            </Button>
+          </div>
         </div>
       </div>
       <div className="max-w-2xl">
@@ -635,9 +763,14 @@ function ArtistDetailView({ artistId }: { artistId: string }) {
               data.country ?? null].filter(Boolean).join(' · ')}
           </p>
           {data.top_tracks.length > 0 && (
-            <Button className="mt-4" icon={<Play size={15} fill="white" />} onClick={() => playTrack(topTracks[0], topTracks, 0)}>
-              Lecture
-            </Button>
+            <div className="flex items-center gap-2 mt-4">
+              <Button icon={<Play size={15} fill="white" />} onClick={() => playTrack(topTracks[0], topTracks, 0)}>
+                Lecture
+              </Button>
+              <Button variant="secondary" icon={<Shuffle size={15} />} onClick={() => playShuffled(topTracks)}>
+                Aléatoire
+              </Button>
+            </div>
           )}
         </div>
       </div>

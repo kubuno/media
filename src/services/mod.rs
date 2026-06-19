@@ -6,3 +6,6 @@ pub mod tmdb;
 pub mod musicbrainz;
 pub mod tvmaze;
 pub mod wikidata;
+pub mod radio_catalog;
+pub mod lyrics;
+pub mod deezer;

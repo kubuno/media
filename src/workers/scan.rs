@@ -280,7 +280,7 @@ pub async fn run_scan(
                 )
                 .fetch_optional(db)
                 .await?
-                .unwrap_or_else(|| Uuid::nil());
+                .unwrap_or_else(Uuid::nil);
 
                 let season_id = if season_id == Uuid::nil() {
                     sqlx::query_scalar!(

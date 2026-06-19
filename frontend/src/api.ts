@@ -123,6 +123,9 @@ export interface Track {
   codec: string | null
   bitrate: number | null
   play_count: number
+  /** Present on liked / recently-played / search results (album cover + artist). */
+  cover_path?: string | null
+  artist_name?: string | null
 }
 
 export interface Playlist {
@@ -133,6 +136,35 @@ export interface Playlist {
   track_count: number
   duration_secs: number
   is_public: boolean
+}
+
+export interface RadioStation {
+  id:          string
+  name:        string
+  stream_url:  string   // already a /api/v1/media/radio/stations/:id/stream proxy URL
+  homepage:    string | null
+  favicon:     string | null
+  tags:        string[]
+  country:     string | null
+  language:    string | null
+  codec:       string | null
+  bitrate:     number | null
+  is_builtin:  boolean
+  is_custom:   boolean
+  is_favorite: boolean
+  click_count: number
+}
+
+export interface RadioDiscoverResult {
+  name:       string
+  stream_url: string
+  homepage:   string | null
+  favicon:    string | null
+  country:    string | null
+  language:   string | null
+  codec:      string | null
+  bitrate:    number | null
+  tags:       string[]
 }
 
 export interface VideoProgress {
@@ -285,6 +317,17 @@ export const mediaApi = {
     const { data } = await api.post(`/media/tracks/${id}/like`)
     return data.liked
   },
+  async getTrackLikeStatus(id: string): Promise<boolean> {
+    try { const { data } = await api.get(`/media/tracks/${id}/like`); return !!data.liked } catch { return false }
+  },
+  async getTrack(id: string): Promise<{ id: string; title: string; lyrics: string | null; album_id: string | null; artist_id: string | null; artist_name: string | null; album_title: string | null }> {
+    const { data } = await api.get(`/media/tracks/${id}`)
+    return data
+  },
+  async getTrackLyrics(id: string): Promise<{ lyrics: string | null; synced?: boolean; source?: string }> {
+    const { data } = await api.get(`/media/tracks/${id}/lyrics`)
+    return data
+  },
 
   // Playlists
   async getPlaylists(): Promise<Playlist[]> {
@@ -300,6 +343,9 @@ export const mediaApi = {
   },
   async deletePlaylist(id: string): Promise<void> {
     await api.delete(`/media/playlists/${id}`)
+  },
+  async addTracksToPlaylist(id: string, trackIds: string[]): Promise<void> {
+    await api.post(`/media/playlists/${id}/tracks`, { track_ids: trackIds })
   },
   async getPlaylist(id: string): Promise<{
     id: string; name: string; track_count: number; duration_secs: number
@@ -375,6 +421,46 @@ export const mediaApi = {
   },
   async setPoster(id: string, posterUrl: string): Promise<void> {
     await api.post(`/media/movies/${id}/set-poster`, { poster_url: posterUrl })
+  },
+
+  // Web radio
+  async getRadioStations(params?: { q?: string; tag?: string; country?: string; mine?: boolean }): Promise<RadioStation[]> {
+    const { data } = await api.get('/media/radio/stations', { params })
+    return data.stations ?? []
+  },
+  async getRadioTags(): Promise<Array<{ tag: string; count: number }>> {
+    const { data } = await api.get('/media/radio/tags')
+    return data.tags ?? []
+  },
+  async getRadioFavorites(): Promise<RadioStation[]> {
+    const { data } = await api.get('/media/radio/favorites')
+    return data.stations ?? []
+  },
+  async getRadioRecent(): Promise<RadioStation[]> {
+    const { data } = await api.get('/media/radio/recent')
+    return data.stations ?? []
+  },
+  async createRadioStation(dto: { name: string; stream_url: string; homepage?: string; favicon?: string; tags?: string[]; country?: string; language?: string; codec?: string; bitrate?: number }): Promise<RadioStation> {
+    const { data } = await api.post('/media/radio/stations', dto)
+    return data
+  },
+  async updateRadioStation(id: string, dto: { name: string; stream_url: string; homepage?: string; favicon?: string; tags?: string[]; country?: string; language?: string; codec?: string; bitrate?: number }): Promise<RadioStation> {
+    const { data } = await api.patch(`/media/radio/stations/${id}`, dto)
+    return data
+  },
+  async deleteRadioStation(id: string): Promise<void> {
+    await api.delete(`/media/radio/stations/${id}`)
+  },
+  async toggleRadioFavorite(id: string): Promise<boolean> {
+    const { data } = await api.post(`/media/radio/stations/${id}/favorite`)
+    return data.favorite
+  },
+  async recordRadioPlay(id: string): Promise<void> {
+    try { await api.post(`/media/radio/stations/${id}/play`) } catch { /* best-effort */ }
+  },
+  async discoverRadio(q: string): Promise<RadioDiscoverResult[]> {
+    const { data } = await api.get('/media/radio/discover', { params: { q } })
+    return data.results ?? []
   },
 
   // Admin settings

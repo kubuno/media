@@ -134,6 +134,9 @@ async fn main() -> Result<()> {
             .run(&migration_pool)
             .await
             .context("Migrations")?;
+
+        // Synchronise the builtin web-radio catalogue (idempotent upsert by slug).
+        kubuno_media::services::radio_catalog::seed(&pool).await;
     }
 
     let http = Client::new();

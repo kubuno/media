@@ -9,8 +9,68 @@ use crate::{
     errors::MediaError,
     middleware::auth::AuthUser,
     models::audio::ListTracksQuery,
+    services::lyrics,
     state::AppState,
 };
+
+#[derive(sqlx::FromRow)]
+struct LyricsRow {
+    title:         String,
+    duration_secs: Option<i32>,
+    lyrics:        Option<String>,
+    lyrics_source: Option<String>,
+    lyrics_synced: bool,
+    album_title:   Option<String>,
+    artist_name:   Option<String>,
+}
+
+/// GET /tracks/:id/lyrics — returns cached/embedded lyrics, or fetches them from
+/// free online providers (LRCLIB → lyrics.ovh → ChartLyrics) and caches the hit.
+pub async fn get_lyrics(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthUser>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>, MediaError> {
+    let row = sqlx::query_as::<_, LyricsRow>(
+        r#"SELECT t.title, t.duration_secs, t.lyrics, t.lyrics_source, t.lyrics_synced,
+                  al.title AS album_title, ar.name AS artist_name
+           FROM media.tracks t
+           LEFT JOIN media.albums  al ON al.id = t.album_id
+           LEFT JOIN media.artists ar ON ar.id = t.artist_id
+           WHERE t.id = $1"#,
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| MediaError::NotFound(format!("Piste {id}")))?;
+
+    // Already have lyrics (embedded in the file or previously fetched).
+    if let Some(text) = row.lyrics.filter(|s| s.trim().len() > 2) {
+        let source = row.lyrics_source.unwrap_or_else(|| "fichier".into());
+        return Ok(Json(json!({ "lyrics": text, "synced": row.lyrics_synced, "source": source })));
+    }
+
+    // Fetch from the online providers.
+    let Some(artist) = row.artist_name.as_deref().filter(|s| !s.is_empty()) else {
+        return Ok(Json(json!({ "lyrics": null })));
+    };
+    match lyrics::fetch(artist, &row.title, row.album_title.as_deref(), row.duration_secs).await {
+        Some(found) => {
+            // Cache for next time.
+            let _ = sqlx::query(
+                "UPDATE media.tracks SET lyrics = $1, lyrics_source = $2, lyrics_synced = $3 WHERE id = $4",
+            )
+            .bind(&found.text)
+            .bind(found.source)
+            .bind(found.synced)
+            .bind(id)
+            .execute(&state.db)
+            .await;
+            Ok(Json(json!({ "lyrics": found.text, "synced": found.synced, "source": found.source })))
+        }
+        None => Ok(Json(json!({ "lyrics": null }))),
+    }
+}
 
 pub async fn get_track(
     State(state): State<AppState>,

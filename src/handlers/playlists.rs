@@ -194,9 +194,10 @@ pub async fn add_tracks(
     .fetch_one(&state.db)
     .await?;
 
-    let mut pos = max_pos.unwrap_or(0) + 1;
+    let base_pos = max_pos.unwrap_or(0) + 1;
 
-    for track_id in &dto.track_ids {
+    for (offset, track_id) in dto.track_ids.iter().enumerate() {
+        let pos = base_pos + offset as i32;
         sqlx::query!(
             "INSERT INTO media.playlist_tracks (playlist_id, track_id, position, added_by)
              VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
@@ -204,7 +205,6 @@ pub async fn add_tracks(
         )
         .execute(&state.db)
         .await?;
-        pos += 1;
     }
 
     // Refresh track_count and duration_secs
