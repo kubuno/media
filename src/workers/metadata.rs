@@ -20,6 +20,102 @@ fn build_http_client() -> Result<reqwest::Client> {
         .build()?)
 }
 
+/// Normalize a title for fuzzy-but-safe comparison: lowercase, strip accents and
+/// any non-alphanumeric character, collapse spaces. "Hunger (film, 2008)" and
+/// "hunger" both normalize to "hunger".
+fn normalize_title(s: &str) -> String {
+    s.chars()
+        .filter_map(|c| {
+            let c = c.to_ascii_lowercase();
+            match c {
+                'à' | 'â' | 'ä' => Some('a'),
+                'é' | 'è' | 'ê' | 'ë' => Some('e'),
+                'î' | 'ï' => Some('i'),
+                'ô' | 'ö' => Some('o'),
+                'û' | 'ü' | 'ù' => Some('u'),
+                'ç' => Some('c'),
+                'a'..='z' | '0'..='9' => Some(c),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// High-quality poster from TMDB without an API key: query the public website
+/// search JSON (`/search/trending`) and pick the poster for a result that
+/// **actually matches** the queried title (`movie` / `tv`). We require an exact
+/// normalized title match so an ambiguous/misnamed file (e.g. a folder named
+/// after an actor) never gets a random poster — when nothing confidently
+/// matches we return None and the caller keeps the existing poster.
+async fn tmdb_poster_url(
+    client: &reqwest::Client,
+    title: &str,
+    year: Option<i32>,
+    media_type: &str,
+) -> Option<String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return None;
+    }
+    let want = normalize_title(title);
+    if want.is_empty() {
+        return None;
+    }
+    let resp = client
+        .get("https://www.themoviedb.org/search/trending")
+        .query(&[("query", title)])
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        )
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .ok()?;
+    let json: serde_json::Value = resp.json().await.ok()?;
+    let results = json.get("results")?.as_array()?;
+
+    let year_str = year.map(|y| y.to_string());
+    // Only consider results whose title matches exactly (after normalization).
+    let mut matched: Option<String> = None;
+    for r in results {
+        if r.get("media_type").and_then(|v| v.as_str()) != Some(media_type) {
+            continue;
+        }
+        let cand = r
+            .get("title")
+            .or_else(|| r.get("name"))
+            .or_else(|| r.get("original_title"))
+            .or_else(|| r.get("original_name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if normalize_title(cand) != want {
+            continue;
+        }
+        let path = match r.get("poster_path").and_then(|v| v.as_str()) {
+            Some(p) if !p.is_empty() => p,
+            _ => continue,
+        };
+        let url = format!("https://image.tmdb.org/t/p/w500{path}");
+        // An exact title + year match is the strongest signal — return at once.
+        if let Some(ref ys) = year_str {
+            let date = r
+                .get("release_date")
+                .or_else(|| r.get("first_air_date"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if date.starts_with(ys.as_str()) {
+                return Some(url);
+            }
+        }
+        // First title match becomes the fallback if no year match surfaces.
+        if matched.is_none() {
+            matched = Some(url);
+        }
+    }
+    matched
+}
+
 /// Charge la langue depuis la DB (priorité) ou la config.
 async fn load_language(db: &PgPool, settings: &Arc<Settings>) -> String {
     sqlx::query_scalar!(
@@ -95,7 +191,7 @@ pub async fn enrich_pending(db: &PgPool, settings: &Arc<Settings>) -> Result<usi
         let search_title = if parsed_title.is_empty() { &movie.title } else { &parsed_title };
 
         let wikidata = WikidataService::new(client.clone(), language.clone());
-        match enrich_movie_wikidata(db, &wikidata, movie.id, search_title, year, &language).await {
+        match enrich_movie_wikidata(db, &client, &wikidata, movie.id, search_title, year, &language).await {
             Ok(_) => tracing::info!(title = %search_title, "Metadata Wikidata OK"),
             Err(e) => {
                 tracing::warn!(error = %e, title = %search_title, "Wikidata échoué, marqué error_meta");
@@ -116,6 +212,7 @@ pub async fn enrich_pending(db: &PgPool, settings: &Arc<Settings>) -> Result<usi
 
 async fn enrich_movie_wikidata(
     db:       &PgPool,
+    client:   &reqwest::Client,
     wikidata: &WikidataService,
     id:       uuid::Uuid,
     title:    &str,
@@ -156,13 +253,24 @@ async fn enrich_movie_wikidata(
     }
     let crew_json = serde_json::Value::Array(crew_entries);
 
-    // Collect all poster URLs: extras first, then the main poster from Wikipedia if new
-    let mut all_posters = extras.poster_urls.clone();
-    if let Some(ref wiki_poster) = result.poster_url {
-        if !all_posters.contains(wiki_poster) {
-            all_posters.push(wiki_poster.clone());
-        }
+    // High-quality TMDB poster (no API key) preferred over the Wikipedia one.
+    // Match against Wikidata's clean canonical title (not the raw file title,
+    // which carries "(film, 2008)" noise) so we only accept a confident match.
+    let movie_match = result.title.as_deref().unwrap_or(title);
+    let tmdb_poster =
+        tmdb_poster_url(client, movie_match, year.or(result.release_year), "movie").await;
+
+    // Collect all poster URLs: TMDB first, then Wikidata extras, then the Wikipedia poster.
+    let mut all_posters: Vec<String> = Vec::new();
+    if let Some(ref t) = tmdb_poster { all_posters.push(t.clone()); }
+    for u in &extras.poster_urls {
+        if !all_posters.contains(u) { all_posters.push(u.clone()); }
     }
+    if let Some(ref wiki_poster) = result.poster_url {
+        if !all_posters.contains(wiki_poster) { all_posters.push(wiki_poster.clone()); }
+    }
+    // Main poster: TMDB if found, else the Wikipedia one.
+    let main_poster = tmdb_poster.clone().or_else(|| result.poster_url.clone());
 
     sqlx::query!(
         r#"UPDATE media.movies
@@ -180,7 +288,7 @@ async fn enrich_movie_wikidata(
         id,
         result.title,
         result.overview,
-        result.poster_url,
+        main_poster,
         &result.genres,
         release_date,
         extras.content_rating,
@@ -219,12 +327,12 @@ pub async fn enrich_pending_shows(db: &PgPool, settings: &Arc<Settings>) -> Resu
         .execute(db)
         .await?;
 
-        match enrich_show_tvmaze(db, &tvmaze, show.id, &show.name).await {
+        match enrich_show_tvmaze(db, &client, &tvmaze, show.id, &show.name).await {
             Ok(_) => tracing::info!(name = %show.name, "Metadata TVMaze OK"),
             Err(e) => {
                 tracing::warn!(error = %e, name = %show.name, "TVMaze échoué, essai Wikidata");
                 let wikidata = WikidataService::new(client.clone(), language.clone());
-                match enrich_show_wikidata(db, &wikidata, show.id, &show.name, &language).await {
+                match enrich_show_wikidata(db, &client, &wikidata, show.id, &show.name, &language).await {
                     Ok(_) => tracing::info!(name = %show.name, "Metadata Wikidata série OK"),
                     Err(e2) => {
                         tracing::warn!(error = %e2, name = %show.name, "Wikidata série échoué");
@@ -247,6 +355,7 @@ pub async fn enrich_pending_shows(db: &PgPool, settings: &Arc<Settings>) -> Resu
 
 async fn enrich_show_tvmaze(
     db:      &PgPool,
+    client:  &reqwest::Client,
     tvmaze:  &TvMazeService,
     show_id: uuid::Uuid,
     name:    &str,
@@ -267,7 +376,7 @@ async fn enrich_show_tvmaze(
     let show = show?;
     let seasons_meta = seasons_meta.unwrap_or_default();
 
-    let poster_url = show.image.as_ref()
+    let tvmaze_poster = show.image.as_ref()
         .and_then(|img| img.original.as_ref().or(img.medium.as_ref()))
         .cloned();
 
@@ -277,6 +386,11 @@ async fn enrich_show_tvmaze(
         .as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
+    // Prefer a high-quality TMDB poster over the TVMaze one. Match against the
+    // canonical TVMaze name (confident match only) — otherwise keep TVMaze's.
+    let show_year = first_air_date.map(|d| d.format("%Y").to_string().parse::<i32>().unwrap_or(0)).filter(|y| *y > 0);
+    let poster_url = tmdb_poster_url(client, &show.name, show_year, "tv").await.or(tvmaze_poster);
 
     let networks: Vec<String> = show.network
         .map(|n| vec![n.name])
@@ -424,6 +538,7 @@ async fn enrich_show_tvmaze(
 
 async fn enrich_show_wikidata(
     db:       &PgPool,
+    client:   &reqwest::Client,
     wikidata: &WikidataService,
     show_id:  uuid::Uuid,
     name:     &str,
@@ -432,6 +547,13 @@ async fn enrich_show_wikidata(
     let extra: &[&str] = if language.starts_with("en") { &[] } else { &["en"] };
     let result: WikidataShowResult = wikidata.search_show_combined(name, None, extra).await?
         .ok_or_else(|| anyhow::anyhow!("Aucun résultat Wikidata/Wikipedia pour la série '{name}'"))?;
+
+    // Prefer a high-quality TMDB poster over the Wikipedia one (confident match
+    // against the canonical Wikidata title only — otherwise keep Wikipedia's).
+    let match_name = result.title.as_deref().unwrap_or(name);
+    let poster = tmdb_poster_url(client, match_name, None, "tv")
+        .await
+        .or_else(|| result.poster_url.clone());
 
     sqlx::query!(
         r#"UPDATE media.tv_shows
@@ -446,7 +568,7 @@ async fn enrich_show_wikidata(
         show_id,
         result.title,
         result.overview,
-        result.poster_url,
+        poster,
         &result.genres,
         &result.networks,
     )

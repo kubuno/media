@@ -412,3 +412,72 @@ pub async fn play_history(
         None => Ok(Json(json!({ "has_progress": false }))),
     }
 }
+
+#[derive(Deserialize)]
+pub struct TrailerSearchQuery {
+    pub title: String,
+    pub year:  Option<i32>,
+}
+
+/// Find a movie/show trailer on YouTube without an API key by fetching the
+/// public results page server-side and extracting the first video id. Returns
+/// `{ "video_id": "<id>" | null }` so the client can embed it directly.
+pub async fn trailer_search(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthUser>,
+    Query(q): Query<TrailerSearchQuery>,
+) -> Result<Json<Value>, MediaError> {
+    // Strip parenthetical/bracketed scan junk (e.g. "Hunger (film, 2008)") so the
+    // query is just the bare title + year.
+    let title = sanitize_title(&q.title);
+    if title.is_empty() {
+        return Ok(Json(json!({ "video_id": Value::Null })));
+    }
+    let query = match q.year {
+        Some(y) => format!("{title} {y} official trailer"),
+        None    => format!("{title} official trailer"),
+    };
+
+    let video_id = match state.http
+        .get("https://www.youtube.com/results")
+        .query(&[("search_query", query.as_str())])
+        .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .send()
+        .await
+    {
+        Ok(resp) => extract_first_video_id(&resp.text().await.unwrap_or_default()),
+        Err(e) => {
+            tracing::warn!(error = %e, query = %query, "YouTube trailer search failed");
+            None
+        }
+    };
+
+    Ok(Json(json!({ "video_id": video_id })))
+}
+
+/// Drop parenthetical/bracketed segments and collapse whitespace.
+fn sanitize_title(t: &str) -> String {
+    let mut out = String::with_capacity(t.len());
+    let mut depth = 0i32;
+    for c in t.chars() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = (depth - 1).max(0),
+            _ if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Extract the first `"videoId":"XXXXXXXXXXX"` (11-char) token from YouTube HTML.
+fn extract_first_video_id(html: &str) -> Option<String> {
+    const NEEDLE: &str = "\"videoId\":\"";
+    let idx = html.find(NEEDLE)? + NEEDLE.len();
+    let id: String = html[idx..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .collect();
+    (id.len() == 11).then_some(id)
+}

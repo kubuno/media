@@ -1,5 +1,5 @@
 use axum::{
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -21,12 +21,14 @@ pub fn build(state: AppState) -> Router {
         .route("/libraries/scan-all",     post(libraries::scan_all_libraries))
         .route("/libraries/files-folders", get(libraries::list_files_folders))
         .route("/libraries/:id",          patch(libraries::update_library).delete(libraries::delete_library))
+        .route("/libraries/:id/shares",   put(libraries::set_library_shares))
         .route("/libraries/:id/scan",     post(libraries::start_scan))
         .route("/libraries/:id/scan/status", get(libraries::scan_status))
         // Movies
         .route("/movies",                 get(movies::list_movies))
         .route("/movies/recent",          get(movies::recent_movies))
         .route("/movies/continue",        get(movies::continue_watching))
+        .route("/movies/trailer-search",  get(movies::trailer_search))
         .route("/movies/:id",             get(movies::get_movie))
         .route("/movies/:id/mark-watched",   post(movies::mark_watched))
         .route("/movies/:id/refresh-meta",   post(movies::refresh_metadata))

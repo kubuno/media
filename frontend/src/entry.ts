@@ -1,6 +1,7 @@
 /** Bundle MODULE media — chargé à l'exécution (cf. vite.module.config). */
 import { lazy } from 'react'
-import { RouteRegistry, WaffleAppRegistry, SlotRegistry, useSidebarStore, SDK_VERSION } from '@kubuno/sdk'
+import { RouteRegistry, WaffleAppRegistry, SlotRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
+import { useMediaSearchStore } from './store/mediaSearchStore'
 import { Tv, Music } from 'lucide-react'
 import './index.css'
 import './i18n'
@@ -26,6 +27,45 @@ export function register() {
     SidebarBody: MediaSidebarBody,
     collapsedBody: true,
   })
+
+  // DJ console: full-bleed (no content padding). Combined with the page's own
+  // chromeless header, the mixer fills the whole shell content area.
+  useToolbarStore.getState().register({
+    moduleId:    'media-dj',
+    routePrefix: '/media/listen/dj',
+    noPadding:   true,
+  })
+
+  // Watch & Listen pages are full-bleed: their gradient hero must reach the
+  // edges of the content card (no shell p-6 around it). The pages add their own
+  // inner padding for the content grids.
+  useToolbarStore.getState().register({ moduleId: 'media-watch',  routePrefix: '/media/watch',  noPadding: true })
+  useToolbarStore.getState().register({ moduleId: 'media-listen', routePrefix: '/media/listen', noPadding: true })
+
+  // Search: drive the shell's shared SearchBar per route instead of in-page
+  // search inputs. The active page reads the query from useMediaSearchStore.
+  // Distinct moduleId per case so the SearchBar clears the query on tab change.
+  const search   = useSearchStore.getState()
+  const setQuery = (q: string) => useMediaSearchStore.getState().setQuery(q)
+  search.register({ moduleId: 'media-movies',  routePrefix: '/media/watch',          placeholder: 'Rechercher un film…',    placeholderKey: 'media:media_search_movies',  onSearch: setQuery })
+  search.register({ moduleId: 'media-shows',   routePrefix: '/media/watch/shows',    placeholder: 'Rechercher une série…',  placeholderKey: 'media:media_search_shows',   onSearch: setQuery })
+  search.register({ moduleId: 'media-artists', routePrefix: '/media/listen',         placeholder: 'Rechercher un artiste…', placeholderKey: 'media:media_search_artists', onSearch: setQuery })
+  search.register({ moduleId: 'media-albums',  routePrefix: '/media/listen/albums',  placeholder: 'Rechercher un album…',   placeholderKey: 'media:media_search_albums',  onSearch: setQuery })
+  // Routes without a search feature: hide the shell SearchBar (override with an
+  // empty component) so a parent prefix's placeholder doesn't bleed in.
+  const NoSearch = () => null
+  for (const [moduleId, routePrefix] of [
+    ['media-watch-continue', '/media/watch/continue'],
+    ['media-movie-detail',   '/media/watch/movie'],
+    ['media-show-detail',    '/media/watch/show'],
+    ['media-playlists',      '/media/listen/playlists'],
+    ['media-liked',          '/media/listen/liked'],
+    ['media-recent',         '/media/listen/recent'],
+    ['media-artist-detail',  '/media/listen/artist'],
+    ['media-album-detail',   '/media/listen/album'],
+    ['media-playlist-detail','/media/listen/playlist'],
+    ['media-radio',          '/media/listen/radio'],
+  ] as const) search.register({ moduleId, routePrefix, placeholder: '', SearchComponent: NoSearch })
 
   // Lecteur audio flottant (bibliothèque musicale)
   SlotRegistry.register('app-dialogs', 'media', MusicPlayer)

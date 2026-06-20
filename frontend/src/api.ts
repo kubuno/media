@@ -8,12 +8,20 @@ export interface MediaLibrary {
   lib_type: 'movies' | 'shows' | 'music' | 'home_videos'
   path: string
   is_shared: boolean
+  shared_user_ids?: string[]
   item_count: number
   scan_status: 'idle' | 'scanning' | 'error'
   last_scan_at: string | null
   source_type: 'filesystem' | 'files_folder'
   files_folder_id: string | null
   files_owner_id: string | null
+}
+
+export interface UserSummary {
+  id: string
+  username: string
+  display_name: string
+  avatar_url: string | null
 }
 
 export interface FilesFolderItem {
@@ -230,6 +238,19 @@ export const mediaApi = {
   async deleteLibrary(id: string): Promise<void> {
     await api.delete(`/media/libraries/${id}`)
   },
+  // Sharing a library with specific users
+  async setLibraryShares(id: string, userIds: string[]): Promise<void> {
+    await api.put(`/media/libraries/${id}/shares`, { user_ids: userIds })
+  },
+  async searchUsers(q: string): Promise<UserSummary[]> {
+    const { data } = await api.get('/users/search', { params: { q, limit: 20 } })
+    return data.users ?? []
+  },
+  async lookupUsers(ids: string[]): Promise<UserSummary[]> {
+    if (ids.length === 0) return []
+    const { data } = await api.get('/users/lookup', { params: { ids: ids.join(',') } })
+    return data.users ?? []
+  },
   async scanLibrary(id: string): Promise<void> {
     await api.post(`/media/libraries/${id}/scan`)
   },
@@ -256,6 +277,12 @@ export const mediaApi = {
   },
   async getMovie(id: string): Promise<Movie> {
     const { data } = await api.get(`/media/movies/${id}`)
+    return data
+  },
+
+  // Find a trailer on YouTube (server-side, no API key) → { video_id }
+  async searchTrailer(title: string, year: number | null): Promise<{ video_id: string | null }> {
+    const { data } = await api.get('/media/movies/trailer-search', { params: { title, year: year ?? undefined } })
     return data
   },
 

@@ -8,6 +8,7 @@ import { Button, Input, ConfirmDialog, MenuDropdown, type MenuDropdownPos, type 
 import { useConfirm } from '@kubuno/sdk'
 import { mediaApi, type RadioStation, type RadioDiscoverResult } from '../api'
 import { usePlayerStore } from '../store/playerStore'
+import { DARK_PAGE } from '../darkTheme'
 
 type Tab = 'all' | 'favorites' | 'recent' | 'mine'
 
@@ -59,7 +60,7 @@ function StationCard({ st, onFav, onEdit, onDelete }: {
       className={`group relative flex flex-col rounded-xl border p-3 transition-colors ${
       active ? 'border-primary bg-primary/5' : 'border-border bg-surface-1 hover:bg-surface-2'
     }`}>
-      {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+      {ctx && <MenuDropdown theme="dark" pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
       <div className="flex items-start gap-3">
         <button
           onClick={() => (playing ? usePlayerStore.getState().togglePlay() : playStation(st))}
@@ -296,28 +297,46 @@ export default function RadioPage() {
   ], [t])
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-6 py-5">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h1 className="text-xl font-bold text-text-primary flex items-center gap-2"><Radio size={22} /> {t('media_radio_title')}</h1>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => setShowDiscover(true)}><Globe size={16} /> {t('media_radio_discover')}</Button>
-            <Button onClick={() => { setEditing(null); setShowForm(true) }}><Plus size={16} /> {t('media_radio_add')}</Button>
+    <div className="flex flex-col h-full" style={DARK_PAGE}>
+      {/* Dark hero banner (like Listen/Watch) + pill tabs */}
+      <div className="flex-shrink-0 relative overflow-hidden"
+           style={{ background: 'linear-gradient(135deg, #1b1730 0%, #241a3a 55%, #181527 100%)' }}>
+        <div className="absolute inset-0 pointer-events-none"
+             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(139,92,246,0.38) 0%, rgba(217,70,239,0.14) 38%, rgba(0,0,0,0) 72%)' }} />
+        <div className="relative px-6 pt-6 pb-6">
+          <div className="flex items-end justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                   style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                <Radio className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-extrabold tracking-tight text-white leading-none">{t('media_radio_title')}</h1>
+                <p className="text-xs text-white/55 mt-1.5">Des milliers de stations du monde entier</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" icon={<Globe size={15} />} onClick={() => setShowDiscover(true)}>{t('media_radio_discover')}</Button>
+              <Button size="sm" icon={<Plus size={15} />} onClick={() => { setEditing(null); setShowForm(true) }}>{t('media_radio_add')}</Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {TABS.map(tb => {
+              const active = tab === tb.id
+              return (
+                <Button key={tb.id} size="sm" variant={active ? 'primary' : 'ghost'}
+                  onClick={() => setTab(tb.id)}
+                  className={active ? undefined : 'text-white/75 hover:text-white hover:bg-white/10'}>
+                  {tb.label}
+                </Button>
+              )
+            })}
           </div>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 mb-3">
-          {TABS.map(tb => (
-            <button key={tb.id} onClick={() => setTab(tb.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                tab === tb.id ? 'bg-primary text-white' : 'text-text-secondary hover:bg-surface-2'
-              }`}>
-              {tb.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 py-6">
 
         {/* Search + tag filter (only on "all") */}
         {tab === 'all' && (
@@ -353,7 +372,7 @@ export default function RadioPage() {
             <p className="text-sm">{t('media_radio_empty')}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {stations.map(st => (
               <StationCard key={st.id} st={st}
                 onFav={s => favMut.mutate(s)}
@@ -362,6 +381,7 @@ export default function RadioPage() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {showForm && (

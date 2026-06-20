@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { GripVertical, X, Trash2, ListMusic } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { GripVertical, X, Trash2, ListMusic, Sliders } from 'lucide-react'
 import { usePlayerStore, type PlayerTrack } from '../../../store/playerStore'
 import { formatDuration } from '../../../api'
 
@@ -8,6 +9,18 @@ export const QUEUE_DRAG_TYPE = 'application/kubuno-track'
 export function QueuePanel() {
   const { queue, queueIndex, playTrack, removeFromQueue, moveInQueue, clearQueue, addToQueue } =
     usePlayerStore()
+  const navigate = useNavigate()
+
+  // Send the whole queue to the DJ mixing table, restore the playhead and resume
+  // playback if it was playing, then close the floating player.
+  const sendToDJ = async () => {
+    const st = usePlayerStore.getState()
+    if (st.queue.length === 0) return
+    const { useDJStore } = await import('../../../store/djStore')
+    useDJStore.getState().importFromPlayer('A', st.queue, Math.max(0, st.queueIndex), st.position, st.isPlaying)
+    st.close()
+    navigate('/media/listen/dj')
+  }
 
   const [dragIndex,    setDragIndex]    = useState<number | null>(null)
   const [dragOverIdx,  setDragOverIdx]  = useState<number | null>(null)
@@ -84,15 +97,26 @@ export function QueuePanel() {
           <span className="text-sm font-semibold text-white">File de lecture</span>
           <span className="text-xs text-white/40">({queue.length})</span>
         </div>
-        {queue.length > 1 && (
-          <button
-            onClick={clearQueue}
-            title="Conserver seulement le titre en cours"
-            className="p-1 rounded text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-          >
-            <Trash2 size={13} />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {queue.length > 0 && (
+            <button
+              onClick={sendToDJ}
+              title="Basculer la file vers la table de mixage (reprend la lecture en cours)"
+              className="p-1 -my-1 rounded text-white/50 hover:text-violet-300 hover:bg-violet-500/15 transition-colors"
+            >
+              <Sliders size={14} />
+            </button>
+          )}
+          {queue.length > 1 && (
+            <button
+              onClick={clearQueue}
+              title="Conserver seulement le titre en cours"
+              className="p-1 -my-1 rounded text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Track list */}

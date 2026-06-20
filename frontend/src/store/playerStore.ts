@@ -29,6 +29,8 @@ interface PlayerState {
   playbackRate:  number
   /** Crossfade duration in seconds (0 = off). */
   crossfadeSecs: number
+  /** Auto-mix: crossfade automatically near the end of a track. */
+  autoCrossfade: boolean
 
   playTrack:       (track: PlayerTrack, queue?: PlayerTrack[], index?: number) => void
   togglePlay:      () => void
@@ -36,6 +38,7 @@ interface PlayerState {
   setVolume:       (v: number) => void
   setPlaybackRate: (r: number) => void
   setCrossfade:    (secs: number) => void
+  setAutoCrossfade:(v: boolean) => void
   next:            () => void
   prev:            () => void
   toggleShuffle:   () => void
@@ -108,6 +111,7 @@ type Snapshot = {
   wasPlaying?:   boolean
   playbackRate?: number
   crossfadeSecs?: number
+  autoCrossfade?: boolean
 }
 
 function loadSnapshot(): Snapshot | null {
@@ -190,11 +194,29 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
   /** Generic crossfade to an explicit track — used for BOTH automatic
    *  end-of-track transitions and manual switches (next/prev/track click).
-   *  Time-based ramp (performance.now) so it works mid-track, not just near the end. */
+   *  Time-based ramp (performance.now) so it works mid-track, not just near the end.
+   *  Chains cleanly when called mid-fade (rapid browsing): the audible incoming
+   *  becomes the new outgoing AT ITS CURRENT VOLUME (no jump), the old outgoing is
+   *  freed for the new track. */
   const crossfadeTo = (track: PlayerTrack, queue: PlayerTrack[], index: number, fadeSecs: number) => {
-    const st  = get()
-    const out = activeEl
-    const inc = inactiveEl()
+    const st = get()
+    let out: HTMLAudioElement
+    let inc: HTMLAudioElement
+    let outStartVol: number
+    if (xf.active && xf.incoming && xf.outgoing) {
+      stopXfRamp()
+      try { xf.outgoing.pause() } catch { /* ignore */ }
+      xf.outgoing.src = ''
+      activeEl    = xf.incoming          // the now-dominant audio becomes active
+      out         = xf.incoming
+      inc         = xf.outgoing          // reuse the freed element for the new track
+      outStartVol = out.volume           // continue from current volume → no blip
+      if (xf.track) set({ currentTrack: xf.track, queue: xf.queue ?? st.queue, queueIndex: xf.index })
+    } else {
+      out         = activeEl
+      inc         = inactiveEl()
+      outStartVol = st.volume
+    }
     inc.src          = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
     inc.playbackRate = st.playbackRate
     inc.volume       = 0
@@ -208,7 +230,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       const vol = get().volume
       const p = Math.max(0, Math.min(1, (performance.now() - t0) / (fadeSecs * 1000)))
       // Equal-power crossfade → constant perceived loudness through the blend.
-      out.volume = Math.cos(p * Math.PI / 2) * vol
+      out.volume = Math.cos(p * Math.PI / 2) * outStartVol
       inc.volume = Math.sin(p * Math.PI / 2) * vol
       // Finish on time, or early if the outgoing track reaches its natural end.
       if (p >= 1 || (isFinite(out.duration) && out.currentTime >= out.duration - 0.05)) {
@@ -252,7 +274,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
   const maybeStartCrossfade = (el: HTMLAudioElement) => {
     if (xf.active) return
     const st = get()
-    if (st.crossfadeSecs <= 0) return
+    if (st.crossfadeSecs <= 0 || !st.autoCrossfade) return
     if (!st.currentTrack || st.currentTrack.isRadio) return
     if (st.repeatMode === 'one') return
     const dur = el.duration
@@ -306,6 +328,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         wasPlaying:    st.isPlaying,
         playbackRate:  st.playbackRate,
         crossfadeSecs: st.crossfadeSecs,
+        autoCrossfade: st.autoCrossfade,
       })
     } else {
       try { sessionStorage.removeItem(SESSION_KEY) } catch {}
@@ -352,14 +375,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     repeatMode:   _snap?.repeatMode ?? 'none',
     playbackRate: _snap?.playbackRate ?? 1,
     crossfadeSecs: _snap?.crossfadeSecs ?? 6,
+    autoCrossfade: _snap?.autoCrossfade ?? true,
 
     playTrack(track, queue = [track], index = 0) {
       const st = get()
-      // Smooth (crossfade) when a different track is already playing; otherwise
-      // load instantly. A short fade keeps manual next/clicks responsive.
+      // Smooth (crossfade) whenever a different audio is already playing — works
+      // for music↔music, music↔radio and radio↔radio (volume blend between the
+      // two elements; no seeking involved, so live radio is fine). Falls back to
+      // an instant load only when nothing is playing or crossfade is disabled.
       const canFade =
-        st.crossfadeSecs > 0 && !!st.currentTrack && st.isPlaying && !xf.active &&
-        !st.currentTrack.isRadio && !track.isRadio && st.currentTrack.id !== track.id &&
+        st.crossfadeSecs > 0 && !!st.currentTrack && st.isPlaying &&
+        st.currentTrack.id !== track.id &&
         activeEl.currentTime < (isFinite(activeEl.duration) ? activeEl.duration - 0.3 : Number.POSITIVE_INFINITY)
       if (canFade) {
         crossfadeTo(track, queue, index, Math.min(st.crossfadeSecs, 1.8))
@@ -378,6 +404,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
     setCrossfade(secs) {
       set({ crossfadeSecs: Math.max(0, Math.min(12, secs)) })
+      _persist()
+    },
+
+    setAutoCrossfade(v) {
+      set({ autoCrossfade: v })
       _persist()
     },
 
@@ -403,7 +434,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     },
 
     next() {
-      cancelCrossfade()
+      // No cancelCrossfade here: playTrack finalizes any in-flight fade then
+      // starts a fresh one, keeping rapid skips smooth.
       const { queue, queueIndex, shuffle } = get()
       if (queue.length === 0) return
       let nextIndex: number
@@ -419,11 +451,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
     prev() {
       const { queue, queueIndex, position } = get()
-      if (position > 3) {
+      if (position > 3 && !xf.active) {
         activeEl.currentTime = 0
         set({ position: 0 })
       } else {
-        cancelCrossfade()
         const prevIndex = queueIndex - 1
         if (prevIndex >= 0) {
           get().playTrack(queue[prevIndex], queue, prevIndex)

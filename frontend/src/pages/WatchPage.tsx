@@ -3,11 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Film, Clapperboard, Clock, Play, Star,
-  Loader2, Film as FilmIcon, Search, ChevronRight, Library, Bookmark,
+  Loader2, Film as FilmIcon, ChevronRight, Library, Bookmark,
 } from 'lucide-react'
 import { mediaApi, posterUrl, formatDuration, type Movie, type TvShow } from '../api'
+import { useMediaSearchStore } from '../store/mediaSearchStore'
+import { DARK_PAGE } from '../darkTheme'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
-import { Tabs, Button, MenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
+import { Button, MenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
 import MovieContextMenu, { type ContextMenuPosition } from '../MovieContextMenu'
 
 // ── Poster card ───────────────────────────────────────────────────────────────
@@ -24,40 +26,37 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
 
   return (
     <>
-      <div
-        onClick={onClick}
-        onContextMenu={handleContextMenu}
-        className="group cursor-pointer rounded-xl overflow-hidden bg-surface-1 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
-      >
-        <div className="aspect-[2/3] bg-surface-2 relative overflow-hidden">
+      <div onClick={onClick} onContextMenu={handleContextMenu} className="group cursor-pointer">
+        <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-violet-400/40 group-hover:shadow-2xl transition-all duration-300"
+             style={{ background: 'rgba(255,255,255,0.05)' }}>
           {poster
-            ? <img src={poster} alt={movie.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-            : <div className="w-full h-full flex items-center justify-center"><FilmIcon className="w-10 h-10 text-text-tertiary" /></div>
+            ? <img src={poster} alt={movie.title} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+            : <div className="w-full h-full flex items-center justify-center"><FilmIcon className="w-12 h-12 text-white/30" /></div>
           }
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-full p-3 shadow-lg">
-              <Play className="w-5 h-5 text-primary fill-primary" />
-            </div>
-          </div>
+          {/* cinematic bottom gradient + meta on hover */}
+          <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           {movie.vote_average && movie.vote_average > 0 && (
-            <div className="absolute top-2 right-2 bg-black/70 text-white text-xs rounded-md px-1.5 py-0.5 flex items-center gap-1">
-              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+            <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-sm text-white text-[11px] font-semibold rounded-md px-1.5 py-0.5 flex items-center gap-1 ring-1 ring-white/10">
+              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
               {movie.vote_average.toFixed(1)}
             </div>
           )}
+          <button
+            onClick={e => { e.stopPropagation(); onClick() }}
+            className="absolute bottom-3 right-3 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+            style={{ background: '#8b5cf6' }}
+            title="Lire">
+            <Play className="w-5 h-5 fill-white ml-0.5" />
+          </button>
         </div>
-        <div className="p-2.5">
-          <p className="text-sm font-medium text-text-primary truncate" title={movie.title}>{movie.title}</p>
-          <p className="text-xs text-text-tertiary mt-0.5">{[year, movie.runtime_mins ? `${movie.runtime_mins} min` : null].filter(Boolean).join(' · ')}</p>
+        <div className="pt-2.5 px-0.5">
+          <p className="text-sm font-semibold text-text-primary truncate" title={movie.title}>{movie.title}</p>
+          <p className="text-xs text-text-tertiary mt-0.5">{[year, movie.runtime_mins ? `${movie.runtime_mins} min` : null].filter(Boolean).join(' · ') || 'Film'}</p>
         </div>
       </div>
 
       {ctxMenu && (
-        <MovieContextMenu
-          movie={movie}
-          position={ctxMenu}
-          onClose={() => setCtxMenu(null)}
-        />
+        <MovieContextMenu movie={movie} position={ctxMenu} onClose={() => setCtxMenu(null)} />
       )}
     </>
   )
@@ -75,36 +74,35 @@ function ShowCard({ show, onClick }: { show: TvShow; onClick: () => void }) {
 
   return (
     <>
-    <div
-      onClick={onClick}
-      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
-      className="group cursor-pointer rounded-xl overflow-hidden bg-surface-1 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
-    >
-      <div className="aspect-[2/3] bg-surface-2 relative overflow-hidden">
+    <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
+      className="group cursor-pointer">
+      <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-violet-400/40 group-hover:shadow-2xl transition-all duration-300"
+           style={{ background: 'rgba(255,255,255,0.05)' }}>
         {poster
-          ? <img src={poster} alt={show.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-          : <div className="w-full h-full flex items-center justify-center"><Clapperboard className="w-10 h-10 text-text-tertiary" /></div>
+          ? <img src={poster} alt={show.name} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+          : <div className="w-full h-full flex items-center justify-center"><Clapperboard className="w-12 h-12 text-white/30" /></div>
         }
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-full p-3 shadow-lg">
-            <Play className="w-5 h-5 text-primary fill-primary" />
-          </div>
-        </div>
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         {show.vote_average && show.vote_average > 0 && (
-          <div className="absolute top-2 right-2 bg-black/70 text-white text-xs rounded-md px-1.5 py-0.5 flex items-center gap-1">
-            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+          <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-sm text-white text-[11px] font-semibold rounded-md px-1.5 py-0.5 flex items-center gap-1 ring-1 ring-white/10">
+            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
             {show.vote_average.toFixed(1)}
           </div>
         )}
+        <button onClick={e => { e.stopPropagation(); onClick() }}
+          className="absolute bottom-3 right-3 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+          style={{ background: '#8b5cf6' }} title="Ouvrir">
+          <Play className="w-5 h-5 fill-white ml-0.5" />
+        </button>
       </div>
-      <div className="p-2.5">
-        <p className="text-sm font-medium text-text-primary truncate" title={show.name}>{show.name}</p>
+      <div className="pt-2.5 px-0.5">
+        <p className="text-sm font-semibold text-text-primary truncate" title={show.name}>{show.name}</p>
         <p className="text-xs text-text-tertiary mt-0.5">
-          {[year, show.season_count > 0 ? `${show.season_count} saison${show.season_count > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ')}
+          {[year, show.season_count > 0 ? `${show.season_count} saison${show.season_count > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ') || 'Série'}
         </p>
       </div>
     </div>
-    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    {ctx && <MenuDropdown theme="dark" pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
     </>
   )
 }
@@ -168,7 +166,7 @@ function EmptyState({ icon, title, subtitle }: { icon: React.ReactNode; title: s
 
 function MoviesTab() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const search = useMediaSearchStore(s => s.query)
 
   const { data: movies = [], isLoading } = useQuery({
     queryKey: ['media', 'movies', search],
@@ -199,23 +197,11 @@ function MoviesTab() {
 
   return (
     <div>
-      {/* Search bar */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher un film…"
-          className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-        />
-      </div>
-
       {!search && recent.length > 0 && (
         <SectionHeader title="Récemment ajoutés" />
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
         {displayMovies.map(movie => (
           <MovieCard key={movie.id} movie={movie} onClick={() => navigate(`/media/watch/movie/${movie.id}`)} />
         ))}
@@ -228,7 +214,7 @@ function MoviesTab() {
 
 function ShowsTab() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const search = useMediaSearchStore(s => s.query)
 
   const { data: shows = [], isLoading } = useQuery({
     queryKey: ['media', 'shows', search],
@@ -251,17 +237,7 @@ function ShowsTab() {
 
   return (
     <div>
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher une série…"
-          className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-        />
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
         {shows.map(show => (
           <ShowCard key={show.id} show={show} onClick={() => navigate(`/media/watch/show/${show.id}`)} />
         ))}
@@ -332,31 +308,44 @@ export default function WatchPage() {
   ]
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-0 flex-shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-semibold text-text-primary">Regarder</h1>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={isScanning
-              ? <Loader2 size={15} className="animate-spin text-primary" />
-              : <Library size={15} />
-            }
-            onClick={() => setLibPanelOpen(true)}
-          >
-            Bibliothèques
-          </Button>
+    <div className="flex flex-col h-full" style={DARK_PAGE}>
+      {/* Dark cinematic hero (Plex/Kodi-style) + pill tabs */}
+      <div className="flex-shrink-0 relative overflow-hidden"
+           style={{ background: 'linear-gradient(135deg, #1b1730 0%, #241a3a 55%, #181527 100%)' }}>
+        <div className="absolute inset-0 pointer-events-none"
+             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(139,92,246,0.34) 0%, rgba(124,58,237,0.12) 38%, rgba(0,0,0,0) 72%)' }} />
+        <div className="relative px-6 pt-6 pb-6">
+          <div className="flex items-end justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                   style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                <Film className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-extrabold tracking-tight text-white leading-none">Regarder</h1>
+                <p className="text-xs text-white/55 mt-1.5">Vos films et séries, en grand</p>
+              </div>
+            </div>
+            <Button size="sm"
+              icon={isScanning ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} />}
+              onClick={() => setLibPanelOpen(true)}>
+              Bibliothèques
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {TABS.map(t => {
+              const active = tab === t.id
+              const Icon = t.icon
+              return (
+                <Button key={t.id} size="sm" variant={active ? 'primary' : 'ghost'}
+                  icon={<Icon size={15} />} onClick={() => navigate(t.path)}
+                  className={active ? undefined : 'text-white/75 hover:text-white hover:bg-white/10'}>
+                  {t.label}
+                </Button>
+              )
+            })}
+          </div>
         </div>
-
-        {/* Tabs */}
-        <Tabs
-          tabs={TABS}
-          value={tab}
-          onChange={id => navigate(TABS.find(t => t.id === id)!.path)}
-          className="-mb-px"
-        />
       </div>
 
       {/* Content */}

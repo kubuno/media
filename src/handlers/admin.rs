@@ -68,23 +68,26 @@ pub async fn trigger_enrich(
 ) -> Result<Json<Value>, MediaError> {
     require_admin(&user)?;
 
-    let reset_movies = sqlx::query_scalar!(
+    // Only re-queue items that actually need it (failed or not-yet-enriched).
+    // Never touch already-'ready' metadata — a full library re-enrichment is
+    // unrequested and risks overwriting good metadata.
+    let reset_movies = sqlx::query(
         "UPDATE media.movies SET meta_status = 'pending_meta'
-         WHERE meta_status IN ('error_meta', 'pending_meta')
-         RETURNING id"
+         WHERE meta_status = 'error_meta'",
     )
-    .fetch_all(&state.db)
-    .await?;
+    .execute(&state.db)
+    .await?
+    .rows_affected();
 
-    let reset_shows = sqlx::query_scalar!(
+    let reset_shows = sqlx::query(
         "UPDATE media.tv_shows SET meta_status = 'pending_meta'
-         WHERE meta_status IN ('error_meta', 'pending_meta')
-         RETURNING id"
+         WHERE meta_status = 'error_meta'",
     )
-    .fetch_all(&state.db)
-    .await?;
+    .execute(&state.db)
+    .await?
+    .rows_affected();
 
-    let count = reset_movies.len() + reset_shows.len();
+    let count = reset_movies + reset_shows;
 
     let db2  = state.db.clone();
     let s2   = state.settings.clone();

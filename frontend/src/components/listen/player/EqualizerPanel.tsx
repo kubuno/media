@@ -1,6 +1,10 @@
 import { useState, useCallback } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
+import { RangeSlider } from '@ui'
 import { audioEngine, EQ_PRESETS, DEFAULT_EQ, type EqState } from '../../../store/audioEngine'
+
+const EQ_ACCENT = '#8b5cf6'
+const EQ_TRACK  = 'rgba(255,255,255,0.15)'
 
 const BAND_LABELS = ['32', '64', '130', '270', '560', '1k', '2k', '4k', '8k', '16k']
 const PRESET_NAMES = ['flat', 'pro', 'dance', 'club', 'acoustic', 'drums', 'rock', 'bass', 'treble', 'vocal']
@@ -17,24 +21,18 @@ function EqSlider({ value, onChange, label }: {
       <span className="text-[9px] font-mono text-violet-300/90" style={{ minWidth: 22, textAlign: 'center' }}>
         {value > 0 ? `+${value}` : value}
       </span>
-      <div className="relative flex-1 flex items-center justify-center" style={{ height: 120 }}>
-        <input
-          type="range"
+      <div className="relative flex items-stretch justify-center" style={{ height: 120 }}>
+        <RangeSlider
+          orientation="vertical"
           min={MIN_DB}
           max={MAX_DB}
           step={1}
           value={value}
-          onChange={e => onChange(Number(e.target.value))}
-          style={{
-            writingMode:      'vertical-lr',
-            direction:        'rtl',
-            WebkitAppearance: 'slider-vertical',
-            width:            20,
-            height:           120,
-            cursor:           'ns-resize',
-            accentColor:      '#8b5cf6',
-          } as React.CSSProperties}
-          onMouseDown={e => e.stopPropagation()}
+          onChange={onChange}
+          accent={EQ_ACCENT}
+          trackColor={EQ_TRACK}
+          style={{ height: 120 }}
+          aria-label={`${label} Hz`}
         />
       </div>
       <span className="text-[9px] text-white/40" style={{ minWidth: 22, textAlign: 'center' }}>
@@ -55,12 +53,9 @@ function HSlider({ label, value, min, max, step = 0.01, onChange }: {
       <span className="text-[10px] font-bold tracking-wider text-white/70 w-20 flex-shrink-0">
         {label}
       </span>
-      <input
-        type="range" min={min} max={max} step={step} value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="flex-1 h-1 cursor-pointer"
-        style={{ accentColor: '#8b5cf6' }}
-        onMouseDown={e => e.stopPropagation()}
+      <RangeSlider
+        min={min} max={max} step={step} value={value} onChange={onChange}
+        accent={EQ_ACCENT} trackColor={EQ_TRACK} className="flex-1" aria-label={label}
       />
     </div>
   )
@@ -193,12 +188,9 @@ export function EqualizerPanel() {
       <div className="px-3 py-2 border-b border-white/10">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold tracking-wider text-white/70 w-10 flex-shrink-0">GAIN</span>
-          <input
-            type="range" min={0} max={2} step={0.01} value={eq.masterGain}
-            onChange={e => handleMasterGain(Number(e.target.value))}
-            className="flex-1 h-1 cursor-pointer"
-            style={{ accentColor: '#8b5cf6' }}
-            onMouseDown={e => e.stopPropagation()}
+          <RangeSlider
+            min={0} max={2} step={0.01} value={eq.masterGain} onChange={handleMasterGain}
+            accent={EQ_ACCENT} trackColor={EQ_TRACK} className="flex-1" aria-label="Gain"
           />
           <span className="text-[10px] font-mono text-violet-300/90 w-8 text-right">
             {Math.round((eq.masterGain - 1) * 100) > 0
