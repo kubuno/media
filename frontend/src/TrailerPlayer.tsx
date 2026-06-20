@@ -1,15 +1,28 @@
-import { Clapperboard, ExternalLink } from 'lucide-react'
+import { Clapperboard, ExternalLink, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { FloatingWindow } from '@ui'
 import { useTrailerStore } from './store/trailerStore'
+import { mediaApi } from './api'
 
 export default function TrailerPlayer() {
   const { t } = useTranslation('media')
   const { isOpen, title, year, trailerKey, close } = useTrailerStore()
 
+  // No embedded trailer key → search YouTube server-side (no API key) for the
+  // best match and embed it directly, instead of dumping the user on a results page.
+  const { data: searched, isLoading } = useQuery({
+    queryKey: ['media', 'trailer-search', title, year],
+    queryFn:  () => mediaApi.searchTrailer(title, year),
+    enabled:  isOpen && !trailerKey && !!title,
+    staleTime: 1000 * 60 * 60,
+    retry: false,
+  })
+
   if (!isOpen) return null
 
   const windowTitle = `${title}${year ? ` (${year})` : ''} — ${t('media_trailer_title')}`
+  const key = trailerKey ?? searched?.video_id ?? null
 
   return (
     <FloatingWindow
@@ -22,14 +35,19 @@ export default function TrailerPlayer() {
       minHeight={220}
       resizable
     >
-      {trailerKey ? (
+      {key ? (
         <iframe
-          src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1`}
+          src={`https://www.youtube-nocookie.com/embed/${key}?autoplay=1`}
           className="w-full h-full border-0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
           title={windowTitle}
         />
+      ) : isLoading ? (
+        <div className="flex flex-col items-center justify-center h-full gap-3 bg-surface-1 text-text-secondary">
+          <Loader2 className="w-7 h-7 animate-spin text-primary" />
+          <p className="text-sm">{t('media_trailer_searching')}</p>
+        </div>
       ) : (
         <NoTrailerFallback title={title} year={year} />
       )}

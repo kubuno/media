@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     errors::MediaError,
     middleware::auth::AuthUser,
-    models::library::{CreateLibraryDto, MediaLibrary, UpdateLibraryDto},
+    models::library::{CreateLibraryDto, MediaLibrary, MediaLibraryFull, SetLibrarySharesDto, UpdateLibraryDto},
     state::AppState,
     workers::scan,
 };
@@ -19,20 +19,50 @@ pub async fn list_libraries(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query_as!(
-        MediaLibrary,
+    // Runtime query (not query_as!) so the new `shared_user_ids` column does not
+    // force a `.sqlx` cache regen. A user sees a library if it is public
+    // (is_shared), owned by them, or explicitly shared with them.
+    let rows = sqlx::query_as::<_, MediaLibraryFull>(
         r#"SELECT id, owner_id, name, lib_type, path, icon, color,
                   is_shared, item_count, last_scan_at, scan_status,
                   scan_error, source_type, files_folder_id, files_owner_id,
-                  created_at, updated_at
+                  shared_user_ids, created_at, updated_at
            FROM media.libraries
-           WHERE is_shared = TRUE OR owner_id = $1
+           WHERE is_shared = TRUE OR owner_id = $1 OR $1 = ANY(shared_user_ids)
            ORDER BY name"#,
-        user.id
     )
+    .bind(user.id)
     .fetch_all(&state.db)
     .await?;
     Ok(Json(json!({ "libraries": rows })))
+}
+
+/// Replace the explicit share list of a library. Owner or admin only.
+pub async fn set_library_shares(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthUser>,
+    Path(id): Path<Uuid>,
+    Json(dto): Json<SetLibrarySharesDto>,
+) -> Result<Json<Value>, MediaError> {
+    let owner: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
+        "SELECT owner_id FROM media.libraries WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| MediaError::NotFound(format!("Bibliothèque {id}")))?;
+
+    if user.role != "admin" && owner != Some(user.id) {
+        return Err(MediaError::Forbidden);
+    }
+
+    sqlx::query("UPDATE media.libraries SET shared_user_ids = $2, updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .bind(&dto.user_ids)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(json!({ "shared_user_ids": dto.user_ids })))
 }
 
 pub async fn create_library(

@@ -23,6 +23,36 @@ pub struct MediaLibrary {
     pub updated_at:      DateTime<Utc>,
 }
 
+/// Library row including the explicit share list (used by list_libraries via a
+/// runtime query, so the new `shared_user_ids` column doesn't require regenerating
+/// the compile-time `.sqlx` cache of the other library queries).
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct MediaLibraryFull {
+    pub id:              Uuid,
+    pub owner_id:        Option<Uuid>,
+    pub name:            String,
+    pub lib_type:        String,
+    pub path:            String,
+    pub icon:            String,
+    pub color:           String,
+    pub is_shared:       bool,
+    pub item_count:      i32,
+    pub last_scan_at:    Option<DateTime<Utc>>,
+    pub scan_status:     String,
+    pub scan_error:      Option<String>,
+    pub source_type:     String,
+    pub files_folder_id: Option<Uuid>,
+    pub files_owner_id:  Option<Uuid>,
+    pub shared_user_ids: Vec<Uuid>,
+    pub created_at:      DateTime<Utc>,
+    pub updated_at:      DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetLibrarySharesDto {
+    pub user_ids: Vec<Uuid>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateLibraryDto {
     pub name:            String,

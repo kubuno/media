@@ -3,13 +3,15 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Mic2, Disc3, ListMusic, Heart, Play,
-  Loader2, Music, Clock, Search, Library, Sliders,
+  Loader2, Music, Clock, Library, Sliders,
   Plus, Pencil, Trash2, Globe, Lock, ListPlus, ListEnd, HeartOff, User, Shuffle, ArrowUpDown,
 } from 'lucide-react'
 import { mediaApi, posterUrl, formatDuration, type Artist, type Album, type Track, type Playlist } from '../api'
-import { Checkbox, Button, Tabs, MenuDropdown, Input, type MenuDropdownPos, type MenuItem } from '@ui'
+import { Checkbox, Button, MenuDropdown, Input, type MenuDropdownPos, type MenuItem } from '@ui'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
 import { usePlayerStore, type PlayerTrack } from '../store/playerStore'
+import { useMediaSearchStore } from '../store/mediaSearchStore'
+import { DARK_PAGE } from '../darkTheme'
 import { QUEUE_DRAG_TYPE } from '../components/listen/player/QueuePanel'
 
 function trackToPlayerTrack(t: Track): PlayerTrack {
@@ -61,24 +63,27 @@ function ArtistCard({ artist, onClick }: { artist: Artist; onClick: () => void }
 
   return (
     <>
-    <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }} className="group cursor-pointer text-center">
-      <div className="aspect-square rounded-full overflow-hidden bg-surface-2 mb-2 relative mx-auto w-full">
+    <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
+         className="group cursor-pointer text-center rounded-2xl p-3 transition-all duration-300 hover:bg-white/5">
+      <div className="aspect-square rounded-full overflow-hidden mb-3 relative mx-auto w-full ring-1 ring-white/10 group-hover:ring-2 group-hover:ring-violet-400/50 shadow-lg transition-all duration-300 bg-white/5">
         {img
-          ? <img src={img} alt={artist.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-          : <div className="w-full h-full flex items-center justify-center"><Mic2 className="w-8 h-8 text-text-tertiary" /></div>
+          ? <img src={img} alt={artist.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
+          : <div className="w-full h-full flex items-center justify-center"><Mic2 className="w-10 h-10 text-white/40" /></div>
         }
-        <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-full p-2 shadow-lg">
-            <Play className="w-4 h-4 text-primary fill-primary" />
-          </div>
-        </div>
+        <button
+          onClick={e => { e.stopPropagation(); void playArtist() }}
+          className="absolute bottom-3 right-3 w-11 h-11 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+          style={{ background: '#8b5cf6' }}
+          title="Lire">
+          <Play className="w-5 h-5 fill-white ml-0.5" />
+        </button>
       </div>
-      <p className="text-sm font-medium text-text-primary truncate" title={artist.name}>{artist.name}</p>
+      <p className="text-sm font-semibold text-text-primary truncate" title={artist.name}>{artist.name}</p>
       <p className="text-xs text-text-tertiary mt-0.5">
-        {[artist.album_count > 0 ? `${artist.album_count} album${artist.album_count > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ')}
+        {[artist.album_count > 0 ? `${artist.album_count} album${artist.album_count > 1 ? 's' : ''}` : 'Artiste'].filter(Boolean).join(' · ')}
       </p>
     </div>
-    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    {ctx && <MenuDropdown theme="dark" pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
     </>
   )
 }
@@ -109,26 +114,30 @@ function AlbumCard({ album, onClick }: { album: Album; onClick: () => void }) {
 
   return (
     <>
-    <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }} className="group cursor-pointer rounded-xl overflow-hidden bg-surface-1 hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
-      <div className="aspect-square bg-surface-2 relative overflow-hidden">
+    <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
+         className="group cursor-pointer rounded-2xl p-3 bg-transparent hover:bg-white/[0.06] transition-all duration-300 hover:-translate-y-1">
+      <div className="aspect-square rounded-xl relative overflow-hidden shadow-lg bg-white/5">
         {cover
-          ? <img src={cover} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" loading="lazy" />
-          : <div className="w-full h-full flex items-center justify-center"><Disc3 className="w-10 h-10 text-text-tertiary" /></div>
+          ? <img src={cover} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+          : <div className="w-full h-full flex items-center justify-center"><Disc3 className="w-12 h-12 text-white/40" /></div>
         }
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-full p-3 shadow-lg">
-            <Play className="w-5 h-5 text-primary fill-primary" />
-          </div>
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        <button
+          onClick={e => { e.stopPropagation(); void playAlbum() }}
+          className="absolute bottom-3 right-3 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
+          style={{ background: '#8b5cf6' }}
+          title="Lire l'album">
+          <Play className="w-5 h-5 fill-white ml-0.5" />
+        </button>
       </div>
-      <div className="p-2.5">
-        <p className="text-sm font-medium text-text-primary truncate" title={album.title}>{album.title}</p>
-        <p className="text-xs text-text-tertiary mt-0.5">
-          {[album.release_year, album.track_count > 0 ? `${album.track_count} titres` : null].filter(Boolean).join(' · ')}
+      <div className="pt-3 px-0.5">
+        <p className="text-sm font-semibold text-text-primary truncate" title={album.title}>{album.title}</p>
+        <p className="text-xs text-text-tertiary mt-0.5 truncate">
+          {[album.release_year, album.track_count > 0 ? `${album.track_count} titres` : null].filter(Boolean).join(' · ') || 'Album'}
         </p>
       </div>
     </div>
-    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    {ctx && <MenuDropdown theme="dark" pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
     </>
   )
 }
@@ -220,7 +229,7 @@ function TrackRow({ track, index, onPlay, onToggleLike, liked, onAddToQueue, pla
         {formatDuration(track.duration_secs)}
       </span>
     </div>
-    {ctx && <MenuDropdown pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
+    {ctx && <MenuDropdown theme="dark" pos={ctx} onClose={() => setCtx(null)} items={menuItems} />}
     </>
   )
 }
@@ -320,6 +329,7 @@ function PlaylistCard({
 
       {ctx && (
         <MenuDropdown
+          theme="dark"
           pos={ctx}
           onClose={() => setCtx(null)}
           items={[
@@ -343,7 +353,7 @@ function PlaylistCard({
 
 function ArtistsTab() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const search = useMediaSearchStore(s => s.query)
   const [sort, setSort] = useState<'name' | 'albums'>('name')
 
   const { data: artistsRaw = [], isLoading } = useQuery({
@@ -367,18 +377,10 @@ function ArtistsTab() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-          <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Rechercher un artiste…"
-            className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-          />
-        </div>
+      <div className="flex items-center justify-end mb-6">
         <SortSelect value={sort} onChange={v => setSort(v as typeof sort)} options={[['name', 'Nom A→Z'], ['albums', "Nb d'albums"]]} />
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
         {artists.map(a => (
           <ArtistCard key={a.id} artist={a} onClick={() => navigate(`/media/listen/artist/${a.id}`)} />
         ))}
@@ -391,7 +393,7 @@ function ArtistsTab() {
 
 function AlbumsTab() {
   const navigate = useNavigate()
-  const [search, setSearch] = useState('')
+  const search = useMediaSearchStore(s => s.query)
   const [sort, setSort] = useState<'title' | 'year' | 'tracks'>('title')
 
   const { data: albumsRaw = [], isLoading } = useQuery({
@@ -417,18 +419,10 @@ function AlbumsTab() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-          <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Rechercher un album…"
-            className="w-full pl-9 pr-4 py-2 bg-surface-2 border border-border rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
-          />
-        </div>
+      <div className="flex items-center justify-end mb-6">
         <SortSelect value={sort} onChange={v => setSort(v as typeof sort)} options={[['title', 'Titre A→Z'], ['year', 'Année'], ['tracks', 'Nb de titres']]} />
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
         {albums.map(a => (
           <AlbumCard key={a.id} album={a} onClick={() => navigate(`/media/listen/album/${a.id}`)} />
         ))}
@@ -440,17 +434,24 @@ function AlbumsTab() {
 // ── Sort dropdown ─────────────────────────────────────────────────────────────
 
 function SortSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: Array<[string, string]> }) {
+  const [menu, setMenu] = useState<MenuDropdownPos | null>(null)
+  const current = options.find(([v]) => v === value)?.[1] ?? ''
   return (
-    <div className="relative flex items-center">
-      <ArrowUpDown className="absolute left-2.5 w-3.5 h-3.5 text-text-tertiary pointer-events-none" />
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="appearance-none pl-8 pr-7 py-2 bg-surface-2 border border-border rounded-full text-sm text-text-secondary outline-none focus:ring-2 focus:ring-primary/30 cursor-pointer"
+    <>
+      <button
+        onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ top: r.bottom + 4, left: r.right - 200, minWidth: 200 }) }}
+        className="inline-flex items-center gap-2 pl-3 pr-3 py-2 bg-surface-2 border border-border rounded-full text-sm text-text-secondary hover:bg-surface-3 transition-colors"
       >
-        {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-      </select>
-    </div>
+        <ArrowUpDown className="w-3.5 h-3.5 text-text-tertiary" />
+        {current}
+      </button>
+      {menu && (
+        <MenuDropdown theme="dark" pos={menu} onClose={() => setMenu(null)}
+          items={options.map(([v, label]) => ({
+            type: 'action', label, checked: v === value, onClick: () => onChange(v),
+          }))} />
+      )}
+    </>
   )
 }
 
@@ -808,7 +809,7 @@ function ArtistDetailView({ artistId }: { artistId: string }) {
       {data.albums.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-3">Albums</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
             {data.albums.map(a => (
               <AlbumCard
                 key={a.id}
@@ -861,38 +862,49 @@ export default function ListenPage() {
   ]
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-6 pt-6 pb-0 flex-shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-semibold text-text-primary">Écouter</h1>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Sliders size={15} />}
-              onClick={() => navigate('/media/listen/dj')}
-            >
-              Table de mixage
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={isScanning
-                ? <Loader2 size={15} className="animate-spin text-primary" />
-                : <Library size={15} />
-              }
-              onClick={() => setLibPanelOpen(true)}
-            >
-              Bibliothèques
-            </Button>
+    <div className="flex flex-col h-full" style={DARK_PAGE}>
+      {/* Dark hero banner (Spotify/Deezer-style) + pill tabs */}
+      <div className="flex-shrink-0 relative overflow-hidden"
+           style={{ background: 'linear-gradient(135deg, #1b1730 0%, #241a3a 55%, #181527 100%)' }}>
+        <div className="absolute inset-0 pointer-events-none"
+             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(139,92,246,0.38) 0%, rgba(217,70,239,0.14) 38%, rgba(0,0,0,0) 72%)' }} />
+        <div className="relative px-6 pt-6 pb-6">
+          <div className="flex items-end justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                   style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                <Music className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-extrabold tracking-tight text-white leading-none">Écouter</h1>
+                <p className="text-xs text-white/55 mt-1.5">Votre musique, vos artistes, vos playlists</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" icon={<Sliders size={15} />} onClick={() => navigate('/media/listen/dj')}>
+                Table de mixage
+              </Button>
+              <Button size="sm"
+                icon={isScanning ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} />}
+                onClick={() => setLibPanelOpen(true)}>
+                Bibliothèques
+              </Button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {TABS.map(t => {
+              const active = tab === t.id
+              const Icon = t.icon
+              return (
+                <Button key={t.id} size="sm" variant={active ? 'primary' : 'ghost'}
+                  icon={<Icon size={15} />} onClick={() => navigate(t.path)}
+                  className={active ? undefined : 'text-white/75 hover:text-white hover:bg-white/10'}>
+                  {t.label}
+                </Button>
+              )
+            })}
           </div>
         </div>
-        <Tabs
-          tabs={TABS}
-          value={tab}
-          onChange={id => navigate(TABS.find(t => t.id === id)!.path)}
-          className="-mb-px overflow-x-auto"
-        />
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-6">

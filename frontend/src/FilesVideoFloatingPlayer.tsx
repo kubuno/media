@@ -7,7 +7,7 @@ import {
   Maximize2, Minimize2, Maximize, X,
   Repeat, SkipBack, SkipForward, PictureInPicture2,
 } from 'lucide-react'
-import { FloatingWindow } from '@ui'
+import { FloatingWindow, RangeSlider } from '@ui'
 import { filesApi, formatSize, type FileItem } from '@kubuno/drive'
 import { useWindowZStore } from '@ui'
 
@@ -483,17 +483,13 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
                 >{volIcon}</button>
 
                 {/* Volume slider */}
-                <input
-                  type="range"
+                <RangeSlider
                   min={0} max={1} step={0.02}
                   value={isMuted ? 0 : volume}
-                  onChange={e => changeVolume(Number(e.target.value))}
-                  style={{ width: 72 }}
-                  className="h-1 rounded-full appearance-none bg-white/25 cursor-pointer flex-shrink-0
-                             [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3
-                             [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full
-                             [&::-webkit-slider-thumb]:bg-white"
-                  onMouseDown={e => e.stopPropagation()}
+                  onChange={changeVolume}
+                  accent="#ffffff" trackColor="rgba(255,255,255,0.25)"
+                  className="flex-shrink-0" style={{ width: 72 }}
+                  aria-label={t('media_player_volume')}
                 />
 
                 {/* Loop */}

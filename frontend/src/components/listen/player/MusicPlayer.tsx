@@ -7,7 +7,7 @@ import {
   Activity, Sliders, Shuffle, Repeat, Repeat1, ListMusic,
   Heart, Gauge, Moon, Mic2, Blend,
 } from 'lucide-react'
-import { FloatingWindow } from '@ui'
+import { FloatingWindow, RangeSlider } from '@ui'
 import { usePlayerStore, audio as playerAudio, audioB as playerAudioB } from '../../../store/playerStore'
 import { useWindowZStore } from '@ui'
 import { audioEngine } from '../../../store/audioEngine'
@@ -76,7 +76,6 @@ function useSleep() {
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
-const CROSSFADES = [0, 3, 6, 9, 12]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -194,11 +193,9 @@ function VolumeControl({ volume, onChange }: { volume: number; onChange: (v: num
       >
         {volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
       </button>
-      <input
-        type="range" min={0} max={1} step={0.02} value={volume}
-        onChange={e => onChange(Number(e.target.value))}
-        className="w-20 h-1 rounded-full appearance-none bg-surface-3 cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
-        onMouseDown={e => e.stopPropagation()}
+      <RangeSlider
+        min={0} max={1} step={0.02} value={volume} onChange={onChange}
+        className="w-20" aria-label="Volume"
       />
     </div>
   )
@@ -244,22 +241,54 @@ function SpeedControl() {
 }
 
 function CrossfadeControl() {
-  const secs = usePlayerStore(s => s.crossfadeSecs)
-  const setCrossfade = usePlayerStore(s => s.setCrossfade)
-  const cycle = () => {
-    const i = CROSSFADES.indexOf(secs)
-    setCrossfade(CROSSFADES[(i + 1) % CROSSFADES.length] ?? 0)
-  }
+  const secs          = usePlayerStore(s => s.crossfadeSecs)
+  const setCrossfade  = usePlayerStore(s => s.setCrossfade)
+  const auto          = usePlayerStore(s => s.autoCrossfade)
+  const setAuto       = usePlayerStore(s => s.setAutoCrossfade)
+  const [open, setOpen] = useState(false)
   return (
-    <button
-      onClick={cycle}
-      title="Fondu enchaîné entre les morceaux"
-      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-        secs > 0 ? 'text-primary bg-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
-      }`}
-    >
-      <Blend size={14} /> {secs > 0 ? `${secs}s` : 'Off'}
-    </button>
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Options de fondu enchaîné"
+        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+          secs > 0 ? 'text-primary bg-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-2'
+        }`}
+      >
+        <Blend size={14} /> {secs > 0 ? `${secs}s` : 'Off'}
+      </button>
+      {open && (
+        <div
+          className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-20 w-52 bg-white border border-border rounded-xl shadow-xl p-3 text-left"
+          onMouseLeave={() => setOpen(false)}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <p className="text-[11px] font-semibold text-text-secondary mb-1.5">Fondu enchaîné</p>
+          <div className="grid grid-cols-4 gap-1 mb-3">
+            {[0, 2, 4, 6, 8, 10, 12].map(s => (
+              <button
+                key={s}
+                onClick={() => setCrossfade(s)}
+                className={`py-1 rounded-md text-[11px] font-medium transition-colors ${
+                  secs === s ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'
+                }`}
+              >
+                {s === 0 ? 'Off' : `${s}s`}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setAuto(!auto)}
+            className="flex items-center justify-between w-full text-[12px] text-text-primary py-1"
+          >
+            <span>Enchaînement auto<br /><span className="text-[10px] text-text-tertiary">fondu en fin de titre</span></span>
+            <span className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${auto ? 'bg-primary' : 'bg-surface-3'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${auto ? 'left-[18px]' : 'left-0.5'}`} />
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -406,7 +435,7 @@ function CenterContent() {
   const hasNext = shuffle || queueIndex < queue.length - 1 || repeatMode !== 'none'
 
   return (
-    <div className="flex flex-col items-center gap-5 px-7 pt-8 pb-7 mx-auto" style={{ width: CENTER_W }}>
+    <div className="flex flex-col items-center gap-4 px-7 pt-5 pb-5 mx-auto" style={{ width: CENTER_W }}>
       {/* Cover art — large, with a gentle breathing scale while playing */}
       <div className={`transition-all duration-700 ease-out ${isPlaying ? 'scale-100' : 'scale-[0.94]'}`}>
         <CoverArt url={currentTrack.coverUrl} size={196} />
@@ -598,7 +627,7 @@ function FullPlayer({ onMinimize, onClose }: {
       icon={<Music size={15} />}
       onClose={onClose}
       defaultWidth={totalWidth}
-      defaultHeight={660}
+      defaultHeight={610}
       minWidth={CENTER_W}
       minHeight={360}
       titleActions={titleActions}
@@ -627,12 +656,15 @@ function FullPlayer({ onMinimize, onClose }: {
           {showLeft && <VisualizerPanel />}
         </div>
 
-        {/* Center — player controls (fills remaining space, content centered).
-            overflow-x-hidden: overflow-y:auto otherwise forces overflow-x:auto
-            (CSS spec) → a stray horizontal scrollbar at the bottom. */}
-        <div className="flex-1 min-w-0 relative overflow-y-auto overflow-x-hidden">
-          {/* Immersive blurred-cover backdrop filling the whole center area */}
-          <div className="absolute inset-0 -z-10 pointer-events-none">
+        {/* Center — player controls, vertically centered so the fixed-height
+            window never shows an empty gap when no side panel is open (the
+            immersive backdrop fills the surrounding space). overflow-x-hidden:
+            overflow-y:auto otherwise forces overflow-x:auto (CSS spec). */}
+        <div className="flex-1 min-w-0 relative overflow-y-auto overflow-x-hidden flex flex-col justify-center">
+          {/* Immersive blurred-cover backdrop filling the whole center area.
+              overflow-hidden: the scale-150 image would otherwise extend past the
+              bottom and create a phantom vertical scrollbar. */}
+          <div className="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
             {currentTrack?.coverUrl
               ? <img src={currentTrack.coverUrl} alt="" className="w-full h-full object-cover blur-3xl scale-150 opacity-40" />
               : <div className="w-full h-full bg-gradient-to-br from-primary/20 via-fuchsia-400/10 to-transparent" />}
@@ -730,7 +762,7 @@ function MiniPlayer() {
   return createPortal(
     <div
       ref={pillRef}
-      className={`fixed flex items-center gap-2 pr-2 pl-2 py-2 bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.18)] border select-none cursor-grab active:cursor-grabbing ${drop.over ? 'border-primary ring-2 ring-primary/40' : 'border-border'}`}
+      className={`fixed flex items-center gap-2 pr-2 pl-2 py-2 bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.18)] border select-none cursor-grab active:cursor-grabbing no-print ${drop.over ? 'border-primary ring-2 ring-primary/40' : 'border-border'}`}
       style={{ bottom: 16, right: 16, zIndex: zIdx, maxWidth: 360 }}
       onMouseDown={onMouseDown}
       onDragOver={drop.onDragOver}
@@ -778,16 +810,44 @@ function MiniPlayer() {
 audioEngine.connect(playerAudio)
 audioEngine.connectSecondary(playerAudioB)
 
+// Singleton guard: the player must appear ONCE even if the host mounts the
+// `app-dialogs` slot in several places. Only the first live instance ("primary")
+// renders the window and handles shortcuts; the rest render nothing. When the
+// primary unmounts, a remaining instance claims the role.
+let _seq = 0
+let _primaryId: number | null = null
+const _subs = new Set<() => void>()
+
 export default function MusicPlayer() {
+  const idRef = useRef(0)
+  if (idRef.current === 0) idRef.current = ++_seq
+  const id = idRef.current
+  const [, force] = useState(0)
+
+  useEffect(() => {
+    const claimOrRerender = () => {
+      if (_primaryId === null) { _primaryId = id; _subs.forEach(s => s()) }
+      force(x => x + 1)
+    }
+    _subs.add(claimOrRerender)
+    claimOrRerender()
+    return () => {
+      _subs.delete(claimOrRerender)
+      if (_primaryId === id) { _primaryId = null; _subs.forEach(s => s()) }
+    }
+  }, [id])
+
+  const isPrimary = _primaryId === id
+
   const { isVisible, isMinimized, minimize, close, currentTrack } = usePlayerStore()
 
   useEffect(() => {
-    audioEngine.resumeIfNeeded()
-  }, [isVisible])
+    if (isPrimary) audioEngine.resumeIfNeeded()
+  }, [isVisible, isPrimary])
 
   // Global keyboard shortcuts (ignored while typing in a field).
   useEffect(() => {
-    if (!isVisible) return
+    if (!isPrimary || !isVisible) return
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
@@ -807,8 +867,9 @@ export default function MusicPlayer() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [isVisible])
+  }, [isVisible, isPrimary])
 
+  if (!isPrimary) return null
   if (!isVisible || !currentTrack) return null
   if (isMinimized) return <MiniPlayer />
 

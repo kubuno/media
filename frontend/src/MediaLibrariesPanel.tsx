@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  X, Library, RefreshCw, Trash2, Plus, Loader2,
+  Library, RefreshCw, Trash2, Plus, Loader2, X, Users,
   Film, Tv2, Music, Video, CheckCircle2, AlertCircle, Clock,
   Settings, Sparkles, Pencil, Check, FolderOpen, HardDrive,
 } from 'lucide-react'
-import { mediaApi, type MediaLibrary, type FilesFolderItem } from './api'
-import { Dropdown, Checkbox, Button, Tabs, Input } from '@ui'
+import { mediaApi, type MediaLibrary, type UserSummary } from './api'
+import { Dropdown, Checkbox, Button, Tabs, Input, FloatingWindow } from '@ui'
 import { useAuthStore } from '@kubuno/sdk'
+import { useFilesDialogStore, type FolderSelection } from '@kubuno/drive'
 import { useConfirm } from '@kubuno/sdk'
 import { ConfirmDialog } from '@ui'
 
@@ -63,73 +64,28 @@ function formatDate(iso: string | null, neverLabel: string, lang: string) {
 
 // ── Add library form ──────────────────────────────────────────────────────────
 
-function FolderSelect({
-  folders,
-  value,
-  onChange,
-}: {
-  folders: FilesFolderItem[]
-  value: string
-  onChange: (folder: FilesFolderItem | null) => void
-}) {
-  const { t } = useTranslation('media')
-  // Group by owner
-  const byOwner = folders.reduce<Record<string, FilesFolderItem[]>>((acc, f) => {
-    const key = f.owner_email
-    ;(acc[key] = acc[key] ?? []).push(f)
-    return acc
-  }, {})
-
-  return (
-    <select
-      value={value}
-      onChange={e => {
-        const folder = folders.find(f => f.id === e.target.value) ?? null
-        onChange(folder)
-      }}
-      className="w-full px-3 py-1.5 text-sm rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-    >
-      <option value="">{t('media_select_folder_placeholder')}</option>
-      {Object.entries(byOwner).map(([email, flds]) => (
-        <optgroup key={email} label={email}>
-          {flds.map(f => (
-            <option key={f.id} value={f.id}>
-              {f.path || '/'}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  )
-}
-
 function AddLibraryForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => void }) {
   const { t } = useTranslation('media')
   const qc = useQueryClient()
-  const [name,       setName]       = useState('')
-  const [libType,    setLibType]    = useState('movies')
-  const [sourceType, setSourceType] = useState<'filesystem' | 'files_folder'>('filesystem')
-  const [path,       setPath]       = useState('')
-  const [isShared,   setIsShared]   = useState(true)
-  const [selectedFolder, setSelectedFolder] = useState<FilesFolderItem | null>(null)
+  const user = useAuthStore(s => s.user)
+  const [name,     setName]     = useState('')
+  const [libType,  setLibType]  = useState('movies')
+  const [isShared, setIsShared] = useState(true)
+  const [folder,   setFolder]   = useState<FolderSelection | null>(null)
 
-  const { data: filesFolders = [], isLoading: foldersLoading } = useQuery({
-    queryKey: ['media', 'files-folders'],
-    queryFn:  mediaApi.getFilesFolders,
-    enabled:  sourceType === 'files_folder',
-  })
+  const pickFolder = async () => {
+    const sel = await useFilesDialogStore.getState().pickFolder({ title: t('media_pick_folder_title') })
+    if (sel) setFolder(sel)
+  }
 
-  const canSubmit = name.trim() && (
-    sourceType === 'filesystem' ? path.trim() : !!selectedFolder
-  )
+  const canSubmit = !!name.trim() && !!folder && folder.id != null
 
   const mutation = useMutation({
-    mutationFn: () => mediaApi.createLibrary(
-      sourceType === 'files_folder' && selectedFolder
-        ? { name, lib_type: libType, is_shared: isShared, source_type: 'files_folder',
-            files_folder_id: selectedFolder.id, files_owner_id: selectedFolder.owner_id }
-        : { name, lib_type: libType, path, is_shared: isShared, source_type: 'filesystem' }
-    ),
+    mutationFn: () => mediaApi.createLibrary({
+      name, lib_type: libType, is_shared: isShared, source_type: 'files_folder',
+      files_folder_id: folder?.id ?? undefined,
+      files_owner_id:  user?.id ?? undefined,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['media', 'libraries'] })
       onSaved()
@@ -161,71 +117,20 @@ function AddLibraryForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
           />
         </div>
 
-        {/* Source */}
+        {/* Dossier — ouvre le navigateur de fichiers du drive */}
         <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1">{t('media_field_source')}</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setSourceType('filesystem')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
-                sourceType === 'filesystem'
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border text-text-secondary hover:bg-surface-2'
-              }`}
-            >
-              <HardDrive size={14} /> {t('media_source_server_path')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSourceType('files_folder')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
-                sourceType === 'files_folder'
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-border text-text-secondary hover:bg-surface-2'
-              }`}
-            >
-              <FolderOpen size={14} /> {t('media_source_files_folder')}
-            </button>
-          </div>
+          <label className="block text-xs font-medium text-text-secondary mb-1">{t('media_field_files_folder')}</label>
+          <button
+            type="button"
+            onClick={pickFolder}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm text-left text-text-secondary hover:border-primary hover:bg-primary/5 transition-colors"
+          >
+            <FolderOpen size={15} className="text-primary flex-shrink-0" />
+            <span className={`flex-1 truncate ${folder ? 'text-text-primary' : 'text-text-tertiary'}`}>
+              {folder ? folder.name : t('media_pick_folder_cta')}
+            </span>
+          </button>
         </div>
-
-        {/* Path ou dossier Files */}
-        {sourceType === 'filesystem' ? (
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">{t('media_field_server_path')}</label>
-            <Input
-              value={path}
-              onChange={e => setPath(e.target.value)}
-              placeholder="/var/lib/kubuno/modules/media/files/movies"
-              className="font-mono"
-            />
-          </div>
-        ) : (
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">
-              {t('media_field_files_folder')}
-            </label>
-            {foldersLoading ? (
-              <div className="flex items-center gap-2 text-sm text-text-secondary py-1.5">
-                <Loader2 size={14} className="animate-spin" /> {t('media_loading_folders')}
-              </div>
-            ) : filesFolders.length === 0 ? (
-              <p className="text-xs text-text-tertiary py-1">{t('media_no_folders')}</p>
-            ) : (
-              <FolderSelect
-                folders={filesFolders}
-                value={selectedFolder?.id ?? ''}
-                onChange={setSelectedFolder}
-              />
-            )}
-            {selectedFolder && (
-              <p className="text-xs text-text-tertiary mt-1">
-                {selectedFolder.owner_email} · {selectedFolder.path || '/'}
-              </p>
-            )}
-          </div>
-        )}
 
         <Checkbox
           label={t('media_shared_with_all')}
@@ -250,12 +155,91 @@ function AddLibraryForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
   )
 }
 
+// ── Share dialog ──────────────────────────────────────────────────────────────
+
+function LibraryShareDialog({ lib, onClose }: { lib: MediaLibrary; onClose: () => void }) {
+  const { t } = useTranslation('media')
+  const qc = useQueryClient()
+  const [selected, setSelected] = useState<UserSummary[]>([])
+  const [search, setSearch] = useState('')
+
+  // Resolve the currently-shared users (ids → names).
+  const { data: current } = useQuery({
+    queryKey: ['media', 'lib-shares', lib.id],
+    queryFn:  () => mediaApi.lookupUsers(lib.shared_user_ids ?? []),
+  })
+  useEffect(() => { if (current) setSelected(current) }, [current])
+
+  const { data: results = [] } = useQuery({
+    queryKey: ['media', 'user-search', search],
+    queryFn:  () => mediaApi.searchUsers(search.trim()),
+    enabled:  search.trim().length > 0,
+  })
+
+  const add    = (u: UserSummary) => setSelected(s => s.some(x => x.id === u.id) ? s : [...s, u])
+  const remove = (id: string)     => setSelected(s => s.filter(x => x.id !== id))
+
+  const save = useMutation({
+    mutationFn: () => mediaApi.setLibraryShares(lib.id, selected.map(u => u.id)),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['media', 'libraries'] }); onClose() },
+  })
+
+  return (
+    <FloatingWindow
+      title={t('media_share_title', { name: lib.name })}
+      icon={<Users size={16} className="text-primary" />}
+      onClose={onClose}
+      defaultWidth={460} defaultHeight={520} minWidth={360} minHeight={380} resizable
+    >
+      <div className="flex flex-col h-full bg-white p-4 gap-3">
+        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('media_share_search_users')} />
+
+        {search.trim() && (
+          <div className="border border-border rounded-lg max-h-40 overflow-y-auto flex-shrink-0">
+            {results.length === 0 ? (
+              <p className="text-xs text-text-tertiary p-2">{t('media_share_no_users')}</p>
+            ) : results.map(u => (
+              <button key={u.id} onClick={() => add(u)}
+                className="flex items-center gap-2 w-full px-3 py-2 hover:bg-surface-1 text-left text-sm">
+                <span className="flex-1 truncate">{u.display_name} <span className="text-text-tertiary">@{u.username}</span></span>
+                {selected.some(x => x.id === u.id) ? <Check size={14} className="text-success" /> : <Plus size={14} className="text-primary" />}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <p className="text-xs font-medium text-text-secondary mb-2">{t('media_share_shared_with')} ({selected.length})</p>
+          {selected.length === 0 ? (
+            <p className="text-xs text-text-tertiary">{t('media_share_none')}</p>
+          ) : (
+            <div className="space-y-1">
+              {selected.map(u => (
+                <div key={u.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-1">
+                  <span className="flex-1 truncate text-sm">{u.display_name} <span className="text-text-tertiary">@{u.username}</span></span>
+                  <button onClick={() => remove(u.id)} className="text-text-tertiary hover:text-danger transition-colors"><X size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1 flex-shrink-0">
+          <Button variant="secondary" size="sm" onClick={onClose}>{t('common_cancel')}</Button>
+          <Button size="sm" onClick={() => save.mutate()} loading={save.isPending}>{t('common_save')}</Button>
+        </div>
+      </div>
+    </FloatingWindow>
+  )
+}
+
 // ── Library row ───────────────────────────────────────────────────────────────
 
 function LibraryRow({ lib, isAdmin }: { lib: MediaLibrary; isAdmin: boolean }) {
   const { t, i18n } = useTranslation('media')
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [editName, setEditName] = useState(lib.name)
   const [editPath, setEditPath] = useState(lib.path)
   const [editShared, setEditShared] = useState(lib.is_shared ?? true)
@@ -398,6 +382,13 @@ function LibraryRow({ lib, isAdmin }: { lib: MediaLibrary; isAdmin: boolean }) {
             <RefreshCw size={15} className={isScanning ? 'animate-spin' : ''} />
           </button>
           <button
+            onClick={() => setShareOpen(true)}
+            title={t('media_share_action')}
+            className="p-1.5 rounded-lg hover:bg-surface-2 text-text-secondary hover:text-primary transition-colors"
+          >
+            <Users size={15} />
+          </button>
+          <button
             onClick={startEdit}
             title={t('common_edit')}
             className="p-1.5 rounded-lg hover:bg-surface-2 text-text-secondary hover:text-primary transition-colors"
@@ -417,6 +408,7 @@ function LibraryRow({ lib, isAdmin }: { lib: MediaLibrary; isAdmin: boolean }) {
           )}
         </div>
       )}
+      {shareOpen && <LibraryShareDialog lib={lib} onClose={() => setShareOpen(false)} />}
     </div>
   )
 }
@@ -551,38 +543,29 @@ export default function MediaLibrariesPanel({ open, onClose }: Props) {
   const hasScanning = libraries.some(l => l.scan_status === 'scanning')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-
-      {/* Panel */}
-      <div className="relative bg-white w-full max-w-md h-full shadow-2xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Library size={18} className="text-primary" />
-            <h2 className="text-base font-semibold text-text-primary">{t('media_panel_title')}</h2>
-            {hasScanning && tab === 'libraries' && <Loader2 size={14} className="animate-spin text-primary" />}
-          </div>
-          <div className="flex items-center gap-1">
-            {isAdmin && tab === 'libraries' && (
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<RefreshCw size={13} className={scanAllMutation.isPending ? 'animate-spin' : ''} />}
-                onClick={() => scanAllMutation.mutate()}
-                disabled={scanAllMutation.isPending || hasScanning}
-                title={t('media_rescan_all')}
-              >
-                {t('media_rescan_all')}
-              </Button>
-            )}
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-2 text-text-secondary transition-colors ml-1">
-              <X size={18} />
-            </button>
-          </div>
-        </div>
-
+    <FloatingWindow
+      title={t('media_panel_title')}
+      icon={<Library size={16} className="text-primary" />}
+      onClose={onClose}
+      defaultWidth={540}
+      defaultHeight={640}
+      minWidth={380}
+      minHeight={420}
+      resizable
+      titleActions={isAdmin && tab === 'libraries' ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<RefreshCw size={13} className={scanAllMutation.isPending ? 'animate-spin' : ''} />}
+          onClick={() => scanAllMutation.mutate()}
+          disabled={scanAllMutation.isPending || hasScanning}
+          title={t('media_rescan_all')}
+        >
+          {t('media_rescan_all')}
+        </Button>
+      ) : undefined}
+    >
+      <div className="flex flex-col h-full bg-white">
         {/* Tab bar */}
         <Tabs
           tabs={[
@@ -637,6 +620,6 @@ export default function MediaLibrariesPanel({ open, onClose }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </FloatingWindow>
   )
 }
