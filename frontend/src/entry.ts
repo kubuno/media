@@ -1,6 +1,6 @@
 /** Bundle MODULE media — chargé à l'exécution (cf. vite.module.config). */
 import { lazy } from 'react'
-import { RouteRegistry, WaffleAppRegistry, SlotRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
+import { RouteRegistry, WaffleAppRegistry, SlotRegistry, ModuleSettingsRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
 import { useMediaSearchStore } from './store/mediaSearchStore'
 import { Tv, Music } from 'lucide-react'
 import './index.css'
@@ -21,12 +21,22 @@ export function register() {
     { id: 'media-listen', label: 'Listen', Icon: Music, path: '/media/listen' },
   ])
 
+  // The header gear button opens the per-user Media settings while in /media.
+  ModuleSettingsRegistry.register('media')
+
   useSidebarStore.getState().register({
     moduleId:    'media',
     routePrefix: '/media',
     SidebarBody: MediaSidebarBody,
     collapsedBody: true,
   })
+
+  // Settings page: hide the shell SearchBar (no in-page search on this route).
+  useToolbarStore.getState().register({
+    moduleId:    'media-settings',
+    routePrefix: '/media/settings',
+  })
+  useSearchStore.getState().register({ moduleId: 'media-settings', routePrefix: '/media/settings', placeholder: '', SearchComponent: () => null })
 
   // DJ console: full-bleed (no content padding). Combined with the page's own
   // chromeless header, the mixer fills the whole shell content area.
@@ -85,6 +95,7 @@ export function register() {
   const ListenPage      = lazy(() => import('./pages/ListenPage'))
   const DJPage          = lazy(() => import('./pages/DJPage'))
   const RadioPage       = lazy(() => import('./pages/RadioPage'))
+  const MediaSettingsPage = lazy(() => import('./MediaSettingsPage'))
 
   RouteRegistry.register('media/watch',                WatchPage)
   RouteRegistry.register('media/watch/shows',          WatchPage)
@@ -101,4 +112,5 @@ export function register() {
   RouteRegistry.register('media/listen/playlist/:id',  ListenPage)
   RouteRegistry.register('media/listen/dj',            DJPage)
   RouteRegistry.register('media/listen/radio',         RadioPage)
+  RouteRegistry.register('media/settings',             MediaSettingsPage)
 }
