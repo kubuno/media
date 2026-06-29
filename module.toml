@@ -1,7 +1,7 @@
 [module]
 id           = "media"
 display_name = "Media"
-version      = "0.1.0"
+version      = "0.1.2"
 description  = "Streaming multimédia — Watch (films/séries) et Listen (musique)"
 author       = "Kubuno Contributors"
 license      = "AGPL-3.0"
