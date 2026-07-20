@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.name, t.homepage, t.logo, t.categories, t.country, t.language,\n                  t.is_builtin, t.owner_id, t.click_count\n           FROM media.tv_favorites f\n           JOIN media.tv_channels t ON t.id = f.channel_id\n           WHERE f.user_id = $1\n           ORDER BY f.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "homepage",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "logo",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "categories",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "country",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "language",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_builtin",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "owner_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "click_count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "6dd4980f2dee620e597ad23f5de45430aa8c0ace5b99edb110b2191edf915dc7"
+}

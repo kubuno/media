@@ -61,7 +61,8 @@ pub async fn get_artist(
 ) -> Result<Json<Value>, MediaError> {
     let artist = sqlx::query!(
         r#"SELECT id, name, sort_name, biography, image_path, genres,
-                  country, artist_type, album_count, track_count
+                  country, artist_type, album_count, track_count,
+                  mbid, begin_date, end_date, meta_status, meta_locked
            FROM media.artists WHERE id = $1"#,
         id
     )
@@ -106,6 +107,11 @@ pub async fn get_artist(
         "genres":      artist.genres,
         "country":     artist.country,
         "artist_type": artist.artist_type,
+        "mbid":        artist.mbid,
+        "begin_date":  artist.begin_date,
+        "end_date":    artist.end_date,
+        "meta_status": artist.meta_status,
+        "meta_locked": artist.meta_locked,
         "album_count": artist.album_count,
         "albums":      albums.iter().map(|a| json!({
             "id":          a.id,

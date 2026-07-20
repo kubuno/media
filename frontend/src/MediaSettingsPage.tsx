@@ -1,13 +1,16 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Music, ArrowLeft, ExternalLink, Check } from 'lucide-react'
+import { Music, ArrowLeft, ExternalLink, Check, KeyRound, Globe2 } from 'lucide-react'
 import { Toggle, Button, Radio } from '@ui'
 import { useModulePrefs } from './userPrefs'
+import { mediaApi } from './api'
 
 // ── Per-user preferences (backend, cross-device via core users.preferences) ─────
 
-interface MediaPrefs {
+// Type alias (not interface): gets an implicit index signature, required by
+// useModulePrefs<T extends Record<string, unknown>>.
+type MediaPrefs = {
   defaultVolume:    string   // '25' | '50' | '75' | '100'
   autoplayNext:     boolean  // play the next track/episode automatically
   normalizeVolume:  boolean  // loudness normalization across tracks
@@ -51,7 +54,7 @@ function RadioGroup({ options, value, onChange }: {
   )
 }
 
-// ── Préférences tab (per-user) ──────────────────────────────────────────────────
+// ── Preferences tab (per-user) ──────────────────────────────────────────────────
 
 function PreferencesTab() {
   const { t } = useTranslation('media')
@@ -175,15 +178,126 @@ function PreferencesTab() {
   )
 }
 
-// ── À propos tab ────────────────────────────────────────────────────────────────
+// ── About tab ────────────────────────────────────────────────────────────────
+
+// ── Metadata providers tab (admin) ──────────────────────────────────────────────
+
+const METADATA_LANGUAGES = [
+  { id: 'fr', label: 'Français' },
+  { id: 'en', label: 'English' },
+  { id: 'de', label: 'Deutsch' },
+  { id: 'es', label: 'Español' },
+  { id: 'it', label: 'Italiano' },
+  { id: 'pt', label: 'Português' },
+]
+
+function MetadataTab() {
+  const [language, setLanguage]   = useState('fr')
+  const [tmdbKey, setTmdbKey]     = useState('')
+  const [omdbKey, setOmdbKey]     = useState('')
+  const [loaded, setLoaded]       = useState(false)
+  const [forbidden, setForbidden] = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [savedFlag, setSavedFlag] = useState(false)
+
+  useEffect(() => {
+    mediaApi.getAdminSettings()
+      .then(s => {
+        if (s.metadata_language) setLanguage(s.metadata_language)
+        if (s.tmdb_api_key) setTmdbKey(s.tmdb_api_key)
+        if (s.omdb_api_key) setOmdbKey(s.omdb_api_key)
+        setLoaded(true)
+      })
+      .catch(() => setForbidden(true))
+  }, [])
+
+  async function save() {
+    setSaving(true)
+    try {
+      await mediaApi.patchAdminSettings({
+        metadata_language: language,
+        tmdb_api_key: tmdbKey.trim(),
+        omdb_api_key: omdbKey.trim(),
+      })
+      setSavedFlag(true)
+      setTimeout(() => setSavedFlag(false), 2500)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (forbidden) {
+    return (
+      <div className="rounded-xl border border-border px-5 py-6 text-sm text-text-tertiary">
+        Réservé aux administrateurs.
+      </div>
+    )
+  }
+  if (!loaded) return null
+
+  return (
+    <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
+      <SettingsRow
+        label="Langue des métadonnées"
+        description="Langue des résumés, genres et titres récupérés sur internet."
+      >
+        <select
+          value={language}
+          onChange={e => setLanguage(e.target.value)}
+          className="text-sm border border-border rounded-lg px-2.5 py-1.5 bg-white text-text-primary"
+        >
+          {METADATA_LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+        </select>
+      </SettingsRow>
+      <SettingsRow
+        label="Clé API TMDB"
+        description="Fournisseur principal films/séries : distribution avec photos, bandes-annonces, classifications, textes localisés. Clé v3 ou jeton v4 — gratuite sur themoviedb.org/settings/api. Vide = repli sans clé (Wikipédia + recherche publique TMDB)."
+      >
+        <div className="flex items-center gap-2">
+          <KeyRound size={14} className="text-text-tertiary" />
+          <input
+            type="password"
+            value={tmdbKey}
+            onChange={e => setTmdbKey(e.target.value)}
+            placeholder="Clé API…"
+            autoComplete="off"
+            className="text-sm border border-border rounded-lg px-2.5 py-1.5 w-64 bg-white text-text-primary placeholder:text-text-tertiary"
+          />
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        label="Clé API OMDb"
+        description="Notes Rotten Tomatoes, IMDb et Metacritic (+ affiches IMDb en secours) sur les fiches films/séries. Clé gratuite sur omdbapi.com/apikey.aspx (1000 requêtes/jour)."
+      >
+        <div className="flex items-center gap-2">
+          <KeyRound size={14} className="text-text-tertiary" />
+          <input
+            type="password"
+            value={omdbKey}
+            onChange={e => setOmdbKey(e.target.value)}
+            placeholder="Clé API…"
+            autoComplete="off"
+            className="text-sm border border-border rounded-lg px-2.5 py-1.5 w-64 bg-white text-text-primary placeholder:text-text-tertiary"
+          />
+        </div>
+      </SettingsRow>
+      <div className="px-5 py-3 flex items-center gap-3 bg-surface-1">
+        <Button size="sm" onClick={() => { void save() }} disabled={saving}
+          icon={savedFlag ? <Check size={14} /> : <Globe2 size={14} />}>
+          {savedFlag ? 'Enregistré' : 'Enregistrer'}
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 function AboutTab() {
   const { t } = useTranslation('media')
   return (
     <div className="rounded-xl border border-border overflow-hidden">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-surface-1">
-        <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
-          <Music size={20} className="text-violet-600" />
+        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+          <Music size={20} className="text-blue-600" />
         </div>
         <div>
           <p className="text-sm font-semibold text-text-primary">Kubuno Media</p>
@@ -203,7 +317,7 @@ function AboutTab() {
 
 // ── Main page (mail-style breadcrumb + tab bar) ─────────────────────────────────
 
-type Tab = 'preferences' | 'about'
+type Tab = 'preferences' | 'metadata' | 'about'
 
 export default function MediaSettingsPage() {
   const { t } = useTranslation('media')
@@ -211,6 +325,7 @@ export default function MediaSettingsPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'preferences', label: t('media_tab_preferences', { defaultValue: 'Préférences' }) },
+    { id: 'metadata',    label: t('media_tab_metadata', { defaultValue: 'Métadonnées' }) },
     { id: 'about',       label: t('media_tab_about', { defaultValue: 'À propos' }) },
   ]
 
@@ -244,6 +359,7 @@ export default function MediaSettingsPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-8 py-6">
           {tab === 'preferences' && <PreferencesTab />}
+          {tab === 'metadata'    && <MetadataTab />}
           {tab === 'about'       && <AboutTab />}
         </div>
       </div>

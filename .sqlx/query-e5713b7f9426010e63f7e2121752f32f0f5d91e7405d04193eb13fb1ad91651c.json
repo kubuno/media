@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.tv_shows\n               (library_id, name, meta_status, overview, genres, tmdb_id, meta_locked)\n               VALUES ($1, $2, $3, $4, $5, $6, $7)\n               ON CONFLICT DO NOTHING\n               RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "TextArray",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e5713b7f9426010e63f7e2121752f32f0f5d91e7405d04193eb13fb1ad91651c"
+}

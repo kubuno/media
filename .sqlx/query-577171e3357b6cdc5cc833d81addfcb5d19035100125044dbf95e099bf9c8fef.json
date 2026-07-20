@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.cat AS \"cat!\", COUNT(*) AS \"count!\"\n           FROM media.tv_channels t, unnest(t.categories) AS c(cat)\n           WHERE t.is_builtin OR t.owner_id = $1\n           GROUP BY c.cat ORDER BY COUNT(*) DESC, c.cat",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cat!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "577171e3357b6cdc5cc833d81addfcb5d19035100125044dbf95e099bf9c8fef"
+}

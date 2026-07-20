@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.movies\n           SET title                = $2,\n               original_title       = $3,\n               overview             = COALESCE(NULLIF($4, ''), overview),\n               tagline              = COALESCE(NULLIF($5, ''), tagline),\n               release_date         = COALESCE($6, release_date),\n               runtime_mins         = COALESCE($7, runtime_mins),\n               poster_path          = COALESCE($8, poster_path),\n               backdrop_path        = COALESCE($9, backdrop_path),\n               vote_average         = COALESCE(CAST($10::float8 AS numeric(3,1)), vote_average),\n               vote_count           = COALESCE($11, vote_count),\n               popularity           = COALESCE(CAST($12::float8 AS numeric(10,3)), popularity),\n               genres               = CASE WHEN cardinality($13::text[]) > 0 THEN $13 ELSE genres END,\n               original_language    = COALESCE($14, original_language),\n               production_countries = CASE WHEN cardinality($15::text[]) > 0 THEN $15 ELSE production_countries END,\n               imdb_id              = COALESCE($16, imdb_id),\n               cast_json            = $17,\n               crew_json            = CASE WHEN jsonb_array_length($18) > 0 THEN $18 ELSE crew_json END,\n               trailer_key          = COALESCE($19, trailer_key),\n               content_rating       = COALESCE($20, content_rating),\n               tmdb_id              = $21,\n               poster_urls          = CASE WHEN $8::text IS NOT NULL AND NOT ($8 = ANY(poster_urls)) THEN array_prepend($8, poster_urls) ELSE poster_urls END,\n               meta_status          = 'ready',\n               meta_retries         = 0,\n               updated_at           = NOW()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Text",
+        "Date",
+        "Int4",
+        "Text",
+        "Text",
+        "Float8",
+        "Int4",
+        "Float8",
+        "TextArray",
+        "Varchar",
+        "TextArray",
+        "Varchar",
+        "Jsonb",
+        "Jsonb",
+        "Varchar",
+        "Varchar",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a5d633bac74ab46ba8f45c9eb0485fd57b28f76f78af663e4d3d14acd4a18858"
+}

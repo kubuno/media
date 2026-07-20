@@ -1,4 +1,4 @@
-/** Bundle MODULE media — chargé à l'exécution (cf. vite.module.config). */
+/** Media MODULE bundle — loaded at runtime (see vite.module.config). */
 import { lazy } from 'react'
 import { RouteRegistry, WaffleAppRegistry, SlotRegistry, ModuleSettingsRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
 import { useMediaSearchStore } from './store/mediaSearchStore'
@@ -11,6 +11,7 @@ import FilesAudioBridge from './FilesAudioBridge'
 import FilesVideoFloatingPlayer from './FilesVideoFloatingPlayer'
 import MediaVideoPlayer from './MediaVideoPlayer'
 import TrailerPlayer from './TrailerPlayer'
+import IdentifyDialog from './IdentifyDialog'
 
 export const sdkVersion = SDK_VERSION
 
@@ -77,31 +78,38 @@ export function register() {
     ['media-radio',          '/media/listen/radio'],
   ] as const) search.register({ moduleId, routePrefix, placeholder: '', SearchComponent: NoSearch })
 
-  // Lecteur audio flottant (bibliothèque musicale)
+  // Floating audio player (music library)
   SlotRegistry.register('app-dialogs', 'media', MusicPlayer)
-  // Bridge : intercepte les fichiers audio ouverts depuis le module files
-  // et les redirige vers le lecteur du module media (plus riche)
+  // Bridge: intercepts audio files opened from the files module
+  // and redirects them to the media module's richer player
   SlotRegistry.register('app-dialogs', 'media', FilesAudioBridge)
-  // Surcharge le lecteur vidéo plein écran de files par une fenêtre flottante
+  // Overrides the files fullscreen video player with a floating window
   SlotRegistry.registerOverride('files-video-player', 'media', FilesVideoFloatingPlayer)
-  // Lecteur vidéo flottant pour les films du module media
+  // Floating video player for the media module's movies
   SlotRegistry.register('app-dialogs', 'media', MediaVideoPlayer)
-  // Lecteur de bande annonce flottant (YouTube embed)
+  // Floating trailer player (YouTube embed)
   SlotRegistry.register('app-dialogs', 'media', TrailerPlayer)
+  // Manual metadata identification
+  SlotRegistry.register('app-dialogs', 'media', IdentifyDialog)
 
   // Routes
   const WatchPage       = lazy(() => import('./pages/WatchPage'))
   const MovieDetailPage = lazy(() => import('./pages/MovieDetailPage'))
+  const ShowDetailPage  = lazy(() => import('./pages/ShowDetailPage'))
+  const TVPage          = lazy(() => import('./pages/TVPage'))
   const ListenPage      = lazy(() => import('./pages/ListenPage'))
   const DJPage          = lazy(() => import('./pages/DJPage'))
   const RadioPage       = lazy(() => import('./pages/RadioPage'))
   const MediaSettingsPage = lazy(() => import('./MediaSettingsPage'))
 
   RouteRegistry.register('media/watch',                WatchPage)
+  RouteRegistry.register('media/watch/movies',         WatchPage)
   RouteRegistry.register('media/watch/shows',          WatchPage)
   RouteRegistry.register('media/watch/continue',       WatchPage)
+  RouteRegistry.register('media/watch/watchlist',      WatchPage)
   RouteRegistry.register('media/watch/movie/:id',      MovieDetailPage)
-  RouteRegistry.register('media/watch/show/:id',       WatchPage)
+  RouteRegistry.register('media/watch/show/:id',       ShowDetailPage)
+  RouteRegistry.register('media/watch/tv',             TVPage)
   RouteRegistry.register('media/listen',               ListenPage)
   RouteRegistry.register('media/listen/albums',        ListenPage)
   RouteRegistry.register('media/listen/playlists',     ListenPage)

@@ -42,6 +42,8 @@ tmdb_language     = "fr-FR"
 musicbrainz_url   = "https://musicbrainz.org/ws/2"
 cover_art_url     = "https://coverartarchive.org"
 musicbrainz_agent = "KubunoMedia/0.1.0 (https://github.com/kubuno/kubuno)"
+# Notes Rotten Tomatoes / IMDb / Metacritic — clé gratuite sur https://www.omdbapi.com/apikey.aspx
+omdb_api_key      = ""
 
 [scan]
 video_extensions    = ["mkv", "mp4", "avi", "mov", "m4v", "ts", "wmv", "webm", "mpg", "mpeg"]

@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, title, file_path, tmdb_id FROM media.movies\n           WHERE NOT meta_locked\n             AND (meta_status = 'pending_meta'\n                  OR (meta_status = 'error_meta' AND meta_retries < 3\n                      AND updated_at < NOW() - INTERVAL '1 hour'))\n           ORDER BY created_at DESC\n           LIMIT 20",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "file_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tmdb_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "40fc9cde4f9bcaefbb66bf43db1271e692dec8aa9cf141471aa04a0e62a4b5f5"
+}

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { registerMediaActivitySource } from './mediaActivity'
 
 export interface PlayerTrack {
   id:            string
@@ -552,3 +553,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     },
   }
 })
+
+// Session keep-awake during playback (music/radio): our audio elements live
+// off-DOM, so we register with the media-activity ping.
+registerMediaActivitySource(() => usePlayerStore.getState().isPlaying)

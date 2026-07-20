@@ -6,7 +6,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
     handlers::{
-        admin, albums, artists, libraries, movies, playlists, progress, radio, search, shows, stream, tracks,
+        admin, albums, artists, identify, libraries, movies, playlists, progress, radio, search, shows, stream, tracks, tv,
     },
     middleware::require_auth,
     state::AppState,
@@ -36,6 +36,8 @@ pub fn build(state: AppState) -> Router {
         .route("/movies/:id/watchlist-status", get(movies::watchlist_status))
         .route("/movies/:id/play-history",   get(movies::play_history))
         .route("/movies/:id/set-poster",     post(movies::set_poster))
+        .route("/movies/:id/identify",       get(identify::identify_movie_search).post(identify::identify_movie_apply))
+        .route("/movies/:id/lock-meta",      post(identify::lock_movie))
         // Watchlist
         .route("/watchlist",                 get(movies::get_watchlist).post(movies::watchlist_add))
         .route("/watchlist/:item_type/:item_id", delete(movies::watchlist_remove))
@@ -43,6 +45,9 @@ pub fn build(state: AppState) -> Router {
         .route("/shows",                  get(shows::list_shows))
         .route("/shows/:id",              get(shows::get_show))
         .route("/shows/:id/seasons/:n/episodes", get(shows::get_season_episodes))
+        .route("/shows/:id/identify",     get(identify::identify_show_search).post(identify::identify_show_apply))
+        .route("/shows/:id/refresh-meta", post(identify::refresh_show))
+        .route("/shows/:id/lock-meta",    post(identify::lock_show))
         // Streaming
         .route("/stream/:id/master.m3u8", get(stream::master_playlist))
         .route("/stream/:id/:quality/playlist.m3u8", get(stream::quality_playlist))
@@ -52,10 +57,17 @@ pub fn build(state: AppState) -> Router {
         // Artists
         .route("/artists",                get(artists::list_artists))
         .route("/artists/:id",            get(artists::get_artist))
+        .route("/artists/:id/identify",   get(identify::identify_artist_search).post(identify::identify_artist_apply))
+        .route("/artists/:id/refresh-meta", post(identify::refresh_artist))
+        .route("/artists/:id/lock-meta",  post(identify::lock_artist))
         // Albums
         .route("/albums",                 get(albums::list_albums))
         .route("/albums/recent",          get(albums::recent_albums))
         .route("/albums/:id",             get(albums::get_album))
+        .route("/albums/:id/identify",    get(identify::identify_album_search).post(identify::identify_album_apply))
+        .route("/albums/:id/refresh-meta", post(identify::refresh_album))
+        .route("/albums/:id/lock-meta",   post(identify::lock_album))
+        .route("/albums/:id/cover",       get(albums::get_album_cover))
         // Tracks
         .route("/tracks/:id",             get(tracks::get_track))
         .route("/tracks/:id/lyrics",      get(tracks::get_lyrics))
@@ -81,6 +93,17 @@ pub fn build(state: AppState) -> Router {
         .route("/radio/recent",           get(radio::list_recent))
         .route("/radio/discover",         get(radio::discover))
         .route("/radio/stations/:id/stream", get(radio::stream))
+        // Web TV
+        .route("/tv/channels",            get(tv::list_channels).post(tv::create_channel))
+        .route("/tv/channels/:id",        delete(tv::delete_channel))
+        .route("/tv/channels/:id/favorite", post(tv::toggle_favorite))
+        .route("/tv/channels/:id/play",   post(tv::record_play))
+        .route("/tv/channels/:id/stream", get(tv::stream))
+        .route("/tv/categories",          get(tv::list_categories))
+        .route("/tv/favorites",           get(tv::list_favorites))
+        .route("/tv/recent",              get(tv::list_recent))
+        .route("/tv/discover",            get(tv::discover))
+        .route("/tv/proxy",               get(tv::proxy))
         // Search
         .route("/search",                 get(search::search))
         // Admin

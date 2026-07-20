@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.movies\n                       (library_id, file_path, file_size, duration_secs, video_codec,\n                        audio_codec, resolution_w, resolution_h, title,\n                        original_title, overview, release_date, genres,\n                        content_rating, tmdb_id, imdb_id, meta_locked, meta_status)\n                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)\n                       ON CONFLICT (file_path) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8",
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Date",
+        "TextArray",
+        "Varchar",
+        "Int4",
+        "Varchar",
+        "Bool",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1b9ca90c005f3b96c4e57b522e829385e0152bcb5009963529b27866af9169c2"
+}

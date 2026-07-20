@@ -137,6 +137,8 @@ async fn main() -> Result<()> {
 
         // Synchronise the builtin web-radio catalogue (idempotent upsert by slug).
         kubuno_media::services::radio_catalog::seed(&pool).await;
+        // Synchronise the builtin web-TV catalogue (idempotent upsert by slug).
+        kubuno_media::services::tv_catalog::seed(&pool).await;
     }
 
     let http = Client::new();

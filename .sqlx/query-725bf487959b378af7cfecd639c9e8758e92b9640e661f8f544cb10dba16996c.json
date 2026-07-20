@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, original_name, first_air_date,\n                  vote_average::FLOAT8, poster_path, backdrop_path,\n                  season_count, episode_count, meta_status\n           FROM media.tv_shows\n           WHERE $3::text IS NULL OR name ILIKE '%' || $3 || '%'\n           ORDER BY (CASE WHEN $4::bool THEN NULL ELSE name END) ASC NULLS FIRST,\n                    created_at DESC\n           LIMIT $1 OFFSET $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "original_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "first_air_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 4,
+        "name": "vote_average",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "poster_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "backdrop_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "season_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "episode_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "meta_status",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      null,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "725bf487959b378af7cfecd639c9e8758e92b9640e661f8f544cb10dba16996c"
+}

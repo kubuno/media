@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.albums SET release_year = COALESCE(release_year, $2) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b07388890f29b5202c0d4db10915fd99ff517f00192ef3f8982c2452bcd690ea"
+}

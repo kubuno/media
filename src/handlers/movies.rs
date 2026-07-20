@@ -73,7 +73,7 @@ pub async fn get_movie(
                   vote_average::FLOAT8, vote_count, popularity::FLOAT8, genres,
                   original_language, production_countries, meta_status,
                   cast_json, crew_json, subtitles, transcode_status,
-                  content_rating, trailer_key, poster_urls,
+                  content_rating, trailer_key, poster_urls, meta_locked, ratings_json,
                   created_at, updated_at
            FROM media.movies WHERE id = $1"#,
         id
@@ -108,6 +108,10 @@ pub async fn get_movie(
         "trailer_key":    row.trailer_key,
         "poster_urls":    row.poster_urls,
         "file_path":      row.file_path,
+        "tmdb_id":        row.tmdb_id,
+        "imdb_id":        row.imdb_id,
+        "meta_locked":    row.meta_locked,
+        "ratings":        row.ratings_json,
     })))
 }
 
@@ -210,8 +214,9 @@ pub async fn refresh_metadata(
     Extension(_user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
+    ensure_movie_unlocked(&state, id).await?;
     let updated = sqlx::query_scalar!(
-        "UPDATE media.movies SET meta_status = 'pending_meta' WHERE id = $1 RETURNING id",
+        "UPDATE media.movies SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1 RETURNING id",
         id
     )
     .fetch_optional(&state.db)
@@ -234,11 +239,29 @@ pub async fn refresh_metadata(
 
 // ── POST /movies/:id/dissociate ───────────────────────────────────────────────
 
+/// Reject refresh/dissociate on a metadata-locked movie.
+async fn ensure_movie_unlocked(state: &AppState, id: Uuid) -> Result<(), MediaError> {
+    let locked = sqlx::query_scalar!(
+        "SELECT meta_locked FROM media.movies WHERE id = $1",
+        id
+    )
+    .fetch_optional(&state.db)
+    .await?;
+    match locked {
+        None => Err(MediaError::NotFound(format!("Film {id}"))),
+        Some(true) => Err(MediaError::Conflict(
+            "Métadonnées verrouillées — déverrouillez le film d'abord".into(),
+        )),
+        Some(false) => Ok(()),
+    }
+}
+
 pub async fn dissociate(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
+    ensure_movie_unlocked(&state, id).await?;
     let updated = sqlx::query_scalar!(
         r#"UPDATE media.movies
            SET tmdb_id              = NULL,
@@ -257,7 +280,8 @@ pub async fn dissociate(
                production_countries = '{}',
                cast_json            = '[]',
                crew_json            = '[]',
-               meta_status          = 'pending_meta'
+               meta_status          = 'pending_meta',
+               meta_retries         = 0
            WHERE id = $1
            RETURNING id"#,
         id
@@ -280,9 +304,12 @@ pub async fn get_watchlist(
 ) -> Result<Json<Value>, MediaError> {
     let rows = sqlx::query!(
         r#"SELECT w.item_type, w.item_id, w.added_at,
-                  m.title, m.poster_path, m.release_date
+                  COALESCE(m.title, s.name)               AS title,
+                  COALESCE(m.poster_path, s.poster_path)  AS poster_path,
+                  COALESCE(m.release_date, s.first_air_date) AS release_date
            FROM media.watchlist w
-           LEFT JOIN media.movies m ON m.id = w.item_id AND w.item_type = 'movie'
+           LEFT JOIN media.movies   m ON m.id = w.item_id AND w.item_type = 'movie'
+           LEFT JOIN media.tv_shows s ON s.id = w.item_id AND w.item_type = 'show'
            WHERE w.user_id = $1
            ORDER BY w.added_at DESC"#,
         user.id

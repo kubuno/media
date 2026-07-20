@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.albums SET mbid = $2 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM media.albums WHERE mbid = $2 AND id <> $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2f949a54f3723cd5aebe72700934789db9f0f80cd1bbb5803b706a675a019931"
+}

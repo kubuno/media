@@ -68,6 +68,7 @@ pub async fn get_album(
     let album = sqlx::query!(
         r#"SELECT a.id, a.title, a.release_date, a.release_year, a.album_type,
                   a.cover_path, a.genres, a.label, a.track_count, a.duration_secs,
+                  a.mbid, a.meta_status, a.meta_locked,
                   ar.id AS artist_id, ar.name AS artist_name, ar.image_path AS artist_image
            FROM media.albums a
            LEFT JOIN media.artists ar ON ar.id = a.artist_id
@@ -113,6 +114,9 @@ pub async fn get_album(
         "cover_path":   cover_path,
         "genres":       album.genres,
         "label":        album.label,
+        "mbid":         album.mbid,
+        "meta_status":  album.meta_status,
+        "meta_locked":  album.meta_locked,
         "track_count":  album.track_count,
         "duration_secs": album.duration_secs,
         "artist_id":    album.artist_id,
@@ -129,6 +133,31 @@ pub async fn get_album(
             "artist_name":   t.artist_name,
         })).collect::<Vec<_>>(),
     })))
+}
+
+/// GET /albums/:id/cover — serve the locally-cached album artwork (folder
+/// image or embedded art extracted at scan time).
+pub async fn get_album_cover(
+    State(state): State<AppState>,
+    Extension(_user): Extension<AuthUser>,
+    Path(id): Path<Uuid>,
+) -> Result<axum::response::Response, MediaError> {
+    use axum::response::IntoResponse;
+
+    let base = crate::services::covers::covers_base(&state.settings);
+    let file = crate::services::covers::cached_cover_file(&base, id);
+    let bytes = tokio::fs::read(&file)
+        .await
+        .map_err(|_| MediaError::NotFound(format!("Pochette de l'album {id}")))?;
+
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "image/jpeg"),
+            (axum::http::header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 pub async fn recent_albums(

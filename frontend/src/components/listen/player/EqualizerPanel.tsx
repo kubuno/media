@@ -3,7 +3,7 @@ import { SlidersHorizontal } from 'lucide-react'
 import { RangeSlider } from '@ui'
 import { audioEngine, EQ_PRESETS, DEFAULT_EQ, type EqState } from '../../../store/audioEngine'
 
-const EQ_ACCENT = '#8b5cf6'
+const EQ_ACCENT = '#2f7dff'
 const EQ_TRACK  = 'rgba(255,255,255,0.15)'
 
 const BAND_LABELS = ['32', '64', '130', '270', '560', '1k', '2k', '4k', '8k', '16k']
@@ -18,7 +18,7 @@ function EqSlider({ value, onChange, label }: {
 }) {
   return (
     <div className="flex flex-col items-center gap-1" style={{ width: 28 }}>
-      <span className="text-[9px] font-mono text-violet-300/90" style={{ minWidth: 22, textAlign: 'center' }}>
+      <span className="text-[9px] font-mono text-blue-300/90" style={{ minWidth: 22, textAlign: 'center' }}>
         {value > 0 ? `+${value}` : value}
       </span>
       <div className="relative flex items-stretch justify-center" style={{ height: 120 }}>
@@ -71,7 +71,7 @@ function Toggle({ label, checked, onChange }: {
       <input
         type="checkbox" checked={checked}
         onChange={e => onChange(e.target.checked)}
-        className="w-3.5 h-3.5 accent-violet-500 cursor-pointer"
+        className="w-3.5 h-3.5 accent-blue-500 cursor-pointer"
         onMouseDown={e => e.stopPropagation()}
       />
       <span className="text-[10px] font-bold tracking-wider text-white/70">{label}</span>
@@ -143,7 +143,7 @@ export function EqualizerPanel() {
   return (
     <div
       className="flex flex-col h-full border-l border-white/10 overflow-y-auto overflow-x-hidden select-none"
-      style={{ width: 280, background: 'radial-gradient(120% 80% at 50% 0%, #1e1b4b 0%, #0b1020 70%)', color: '#fff', fontSize: 12 }}
+      style={{ width: 280, background: 'radial-gradient(120% 80% at 50% 0%, #20222a 0%, #0d0e11 70%)', color: '#fff', fontSize: 12 }}
     >
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-white/10 flex items-center justify-between flex-shrink-0">
@@ -162,7 +162,7 @@ export function EqualizerPanel() {
           <button
             onClick={() => handleBypass(!eq.bypass)}
             className={`px-2 py-0.5 text-[9px] font-bold tracking-wider rounded transition-colors ${
-              eq.bypass ? 'bg-fuchsia-500 text-white' : 'bg-white/10 hover:bg-white/20'
+              eq.bypass ? 'bg-primary text-white' : 'bg-white/10 hover:bg-white/20'
             }`}
             onMouseDown={e => e.stopPropagation()}
           >
@@ -192,7 +192,7 @@ export function EqualizerPanel() {
             min={0} max={2} step={0.01} value={eq.masterGain} onChange={handleMasterGain}
             accent={EQ_ACCENT} trackColor={EQ_TRACK} className="flex-1" aria-label="Gain"
           />
-          <span className="text-[10px] font-mono text-violet-300/90 w-8 text-right">
+          <span className="text-[10px] font-mono text-blue-300/90 w-8 text-right">
             {Math.round((eq.masterGain - 1) * 100) > 0
               ? `+${Math.round((eq.masterGain - 1) * 100)}`
               : Math.round((eq.masterGain - 1) * 100)}
@@ -230,7 +230,7 @@ export function EqualizerPanel() {
               onClick={() => handlePreset(name)}
               className={`px-2 py-1 text-[9px] font-bold tracking-wider rounded transition-colors ${
                 eq.preset === name
-                  ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white'
+                  ? 'bg-primary text-white'
                   : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white/90'
               }`}
               onMouseDown={e => e.stopPropagation()}

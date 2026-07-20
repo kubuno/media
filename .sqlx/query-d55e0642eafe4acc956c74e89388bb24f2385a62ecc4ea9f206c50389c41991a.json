@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.artists SET meta_status = 'fetching' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d55e0642eafe4acc956c74e89388bb24f2385a62ecc4ea9f206c50389c41991a"
+}

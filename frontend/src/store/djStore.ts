@@ -1,11 +1,14 @@
 import { create } from 'zustand'
+import { registerMediaActivitySource } from './mediaActivity'
 import type { PlayerTrack } from './playerStore'
 
 // ── Hot cue palette ───────────────────────────────────────────────────────────
 
+// No cyan / purple / pink (console palette rule): red, orange, yellow, green,
+// blue, lime, amber, white.
 export const HOT_CUE_COLORS = [
-  '#ff2244', '#ff8800', '#ffee00', '#00ff88',
-  '#00ccff', '#4477ff', '#cc44ff', '#ff44cc',
+  '#ff2244', '#ff8800', '#ffee00', '#00e676',
+  '#2f7dff', '#8fd14f', '#ffb02e', '#ffffff',
 ] as const
 
 // ── Per-deck audio engine ─────────────────────────────────────────────────────
@@ -2541,4 +2544,11 @@ export const useDJStore = create<DJStoreState>((set, get) => {
     _setPlaying:  (deck, v)   => set(s => ({ [dk(deck)]: { ...s[dk(deck)], isPlaying: v } })),
     _setLoading:  (deck, v)   => set(s => ({ [dk(deck)]: { ...s[dk(deck)], isLoading: v } })),
   }
+})
+
+// Session keep-awake during playback: the decks use off-DOM audio elements →
+// report activity as long as at least one deck is playing.
+registerMediaActivitySource(() => {
+  const s = useDJStore.getState()
+  return ALL_DECKS.some(d => s[dk(d)].isPlaying)
 })

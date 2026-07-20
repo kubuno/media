@@ -1,0 +1,106 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, sort_name, biography, image_path, genres,\n                  country, artist_type, album_count, track_count,\n                  mbid, begin_date, end_date, meta_status, meta_locked\n           FROM media.artists WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "sort_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "biography",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "image_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "genres",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 6,
+        "name": "country",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "artist_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "album_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "track_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "mbid",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "begin_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 12,
+        "name": "end_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 13,
+        "name": "meta_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "meta_locked",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "6b50d159a0e4e5b7216b7f9346ffe5485ab6dbe5ddd942d9be07bbb424044ae0"
+}

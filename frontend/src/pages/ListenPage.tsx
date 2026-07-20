@@ -5,12 +5,14 @@ import {
   Mic2, Disc3, ListMusic, Heart, Play,
   Loader2, Music, Clock, Library, Sliders,
   Plus, Pencil, Trash2, Globe, Lock, ListPlus, ListEnd, HeartOff, User, Shuffle, ArrowUpDown,
+  MoreHorizontal, RefreshCw, Target, Unlock,
 } from 'lucide-react'
 import { mediaApi, posterUrl, formatDuration, type Artist, type Album, type Track, type Playlist } from '../api'
-import { Checkbox, Button, MenuDropdown, Input, type MenuDropdownPos, type MenuItem } from '@ui'
+import { Checkbox, Button, MenuDropdown, Input, useMenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
 import { usePlayerStore, type PlayerTrack } from '../store/playerStore'
 import { useMediaSearchStore } from '../store/mediaSearchStore'
+import { useIdentifyStore } from '../store/identifyStore'
 import { DARK_PAGE } from '../darkTheme'
 import { QUEUE_DRAG_TYPE } from '../components/listen/player/QueuePanel'
 
@@ -65,7 +67,7 @@ function ArtistCard({ artist, onClick }: { artist: Artist; onClick: () => void }
     <>
     <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
          className="group cursor-pointer text-center rounded-2xl p-3 transition-all duration-300 hover:bg-white/5">
-      <div className="aspect-square rounded-full overflow-hidden mb-3 relative mx-auto w-full ring-1 ring-white/10 group-hover:ring-2 group-hover:ring-violet-400/50 shadow-lg transition-all duration-300 bg-white/5">
+      <div className="aspect-square rounded-full overflow-hidden mb-3 relative mx-auto w-full ring-1 ring-white/10 group-hover:ring-2 group-hover:ring-blue-400/50 shadow-lg transition-all duration-300 bg-white/5">
         {img
           ? <img src={img} alt={artist.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center"><Mic2 className="w-10 h-10 text-white/40" /></div>
@@ -73,7 +75,7 @@ function ArtistCard({ artist, onClick }: { artist: Artist; onClick: () => void }
         <button
           onClick={e => { e.stopPropagation(); void playArtist() }}
           className="absolute bottom-3 right-3 w-11 h-11 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-          style={{ background: '#8b5cf6' }}
+          style={{ background: '#2f7dff' }}
           title="Lire">
           <Play className="w-5 h-5 fill-white ml-0.5" />
         </button>
@@ -125,7 +127,7 @@ function AlbumCard({ album, onClick }: { album: Album; onClick: () => void }) {
         <button
           onClick={e => { e.stopPropagation(); void playAlbum() }}
           className="absolute bottom-3 right-3 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-          style={{ background: '#8b5cf6' }}
+          style={{ background: '#2f7dff' }}
           title="Lire l'album">
           <Play className="w-5 h-5 fill-white ml-0.5" />
         </button>
@@ -601,7 +603,7 @@ function LikedTab() {
   )
 }
 
-// ── Tab: Récemment joués ──────────────────────────────────────────────────────
+// ── Tab: Recently played ──────────────────────────────────────────────────────
 
 function RecentTab() {
   const queryClient = useQueryClient()
@@ -654,7 +656,10 @@ function RecentTab() {
 
 function AlbumDetailView({ albumId }: { albumId: string }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { playTrack, addToQueue } = usePlayerStore()
+  const openIdentify = useIdentifyStore(s => s.open)
+  const metaMenu = useMenuDropdown()
   const { data, isLoading } = useQuery({
     queryKey: ['media', 'album', albumId],
     queryFn:  () => mediaApi.getAlbum(albumId),
@@ -672,6 +677,27 @@ function AlbumDetailView({ albumId }: { albumId: string }) {
     durationSecs: t.duration_secs,
   }))
 
+  const refreshAlbumViews = () => {
+    void queryClient.invalidateQueries({ queryKey: ['media', 'album', albumId] })
+    void queryClient.invalidateQueries({ queryKey: ['media', 'albums'] })
+  }
+  const albumLocked = album.meta_locked === true
+  const metaItems: MenuItem[] = [
+    { type: 'action', icon: <Target className="w-4 h-4" />, label: 'Identifier…',
+      onClick: () => openIdentify({ kind: 'album', id: albumId, name: album.title, artist: album.artist_name ?? null }) },
+    { type: 'action', icon: <RefreshCw className="w-4 h-4" />, label: 'Rafraîchir les métadonnées',
+      disabled: albumLocked,
+      onClick: () => {
+        void mediaApi.refreshAlbumMeta(albumId).then(() => {
+          // Background enrichment — refresh views once it had time to land.
+          setTimeout(refreshAlbumViews, 5000)
+        }).catch(() => {})
+      } },
+    { type: 'action', icon: albumLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />,
+      label: albumLocked ? 'Déverrouiller les métadonnées' : 'Verrouiller les métadonnées',
+      onClick: () => { void mediaApi.lockMeta('albums', albumId, !albumLocked).then(refreshAlbumViews) } },
+  ]
+
   return (
     <div>
       <button
@@ -688,11 +714,31 @@ function AlbumDetailView({ albumId }: { albumId: string }) {
           }
         </div>
         <div>
-          <p className="text-xs text-text-tertiary uppercase tracking-widest mb-1">Album</p>
-          <h2 className="text-3xl font-bold text-text-primary mb-1">{album.title}</h2>
-          <p className="text-sm text-text-secondary">
-            {[album.release_year, `${tracks.length} titres`, formatDuration(album.duration_secs)].filter(Boolean).join(' · ')}
+          <p className="text-xs text-text-tertiary uppercase tracking-widest mb-1">
+            {album.album_type && album.album_type !== 'Album' ? album.album_type : 'Album'}
           </p>
+          <h2 className="text-3xl font-bold text-text-primary mb-1">{album.title}</h2>
+          {album.artist_name && (
+            <button
+              onClick={() => album.artist_id && navigate(`/media/listen/artist/${album.artist_id}`)}
+              className="text-sm font-medium text-text-primary hover:text-primary transition-colors mb-1"
+            >
+              {album.artist_name}
+            </button>
+          )}
+          <p className="text-sm text-text-secondary">
+            {[album.release_year, `${tracks.length} titres`, formatDuration(album.duration_secs), album.label]
+              .filter(Boolean).join(' · ')}
+          </p>
+          {(album.genres?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {album.genres.map(g => (
+                <span key={g} className="px-2 py-0.5 rounded-full bg-surface-2 text-text-secondary text-xs border border-border">
+                  {g}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 mt-4">
             <Button icon={<Play size={15} fill="white" />} onClick={() => tracks.length > 0 && playTrack(queue[0], queue, 0)}>
               Lecture
@@ -700,7 +746,11 @@ function AlbumDetailView({ albumId }: { albumId: string }) {
             <Button variant="secondary" icon={<Shuffle size={15} />} onClick={() => playShuffled(queue)}>
               Aléatoire
             </Button>
+            <Button variant="secondary" icon={<MoreHorizontal size={15} />} onClick={metaMenu.open} aria-label="Plus d'options" />
           </div>
+          {metaMenu.isOpen && metaMenu.pos && (
+            <MenuDropdown pos={metaMenu.pos} onClose={metaMenu.close} items={metaItems} />
+          )}
         </div>
       </div>
       <div className="max-w-2xl">
@@ -723,7 +773,11 @@ function AlbumDetailView({ albumId }: { albumId: string }) {
 
 function ArtistDetailView({ artistId }: { artistId: string }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { playTrack, addToQueue } = usePlayerStore()
+  const openIdentify = useIdentifyStore(s => s.open)
+  const metaMenu = useMenuDropdown()
+  const [bioExpanded, setBioExpanded] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ['media', 'artist', artistId],
     queryFn:  () => mediaApi.getArtist(artistId),
@@ -735,6 +789,32 @@ function ArtistDetailView({ artistId }: { artistId: string }) {
   const topTracks: PlayerTrack[] = data.top_tracks.map(t => ({
     id: t.id, title: t.title, durationSecs: t.duration_secs,
   }))
+
+  // "1969 – 1980" / "Depuis 1969" activity span from MusicBrainz dates.
+  const beginYear = data.begin_date?.slice(0, 4) ?? null
+  const endYear   = data.end_date?.slice(0, 4) ?? null
+  const years = beginYear ? (endYear ? `${beginYear} – ${endYear}` : `Depuis ${beginYear}`) : null
+
+  const refreshArtistViews = () => {
+    void queryClient.invalidateQueries({ queryKey: ['media', 'artist', artistId] })
+    void queryClient.invalidateQueries({ queryKey: ['media', 'artists'] })
+  }
+  const artistLocked = data.meta_locked === true
+  const metaItems: MenuItem[] = [
+    { type: 'action', icon: <Target className="w-4 h-4" />, label: 'Identifier…',
+      onClick: () => openIdentify({ kind: 'artist', id: artistId, name: data.name }) },
+    { type: 'action', icon: <RefreshCw className="w-4 h-4" />, label: 'Rafraîchir les métadonnées',
+      disabled: artistLocked,
+      onClick: () => {
+        void mediaApi.refreshArtistMeta(artistId).then(() => {
+          // Background enrichment — refresh views once it had time to land.
+          setTimeout(refreshArtistViews, 5000)
+        }).catch(() => {})
+      } },
+    { type: 'action', icon: artistLocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />,
+      label: artistLocked ? 'Déverrouiller les métadonnées' : 'Verrouiller les métadonnées',
+      onClick: () => { void mediaApi.lockMeta('artists', artistId, !artistLocked).then(refreshArtistViews) } },
+  ]
 
   return (
     <div>
@@ -754,24 +834,33 @@ function ArtistDetailView({ artistId }: { artistId: string }) {
           }
         </div>
         <div>
-          <p className="text-xs text-text-tertiary uppercase tracking-widest mb-1">Artiste</p>
+          <p className="text-xs text-text-tertiary uppercase tracking-widest mb-1">
+            {data.artist_type === 'Group' ? 'Groupe' : 'Artiste'}
+          </p>
           <h2 className="text-3xl font-bold text-text-primary mb-1">{data.name}</h2>
           {(data.genres?.length ?? 0) > 0 && (
             <p className="text-sm text-text-secondary mb-2">{data.genres!.join(', ')}</p>
           )}
           <p className="text-sm text-text-tertiary">
             {[data.album_count > 0 ? `${data.album_count} album${data.album_count > 1 ? 's' : ''}` : null,
-              data.country ?? null].filter(Boolean).join(' · ')}
+              data.country ?? null,
+              years].filter(Boolean).join(' · ')}
           </p>
-          {data.top_tracks.length > 0 && (
-            <div className="flex items-center gap-2 mt-4">
-              <Button icon={<Play size={15} fill="white" />} onClick={() => playTrack(topTracks[0], topTracks, 0)}>
-                Lecture
-              </Button>
-              <Button variant="secondary" icon={<Shuffle size={15} />} onClick={() => playShuffled(topTracks)}>
-                Aléatoire
-              </Button>
-            </div>
+          <div className="flex items-center gap-2 mt-4">
+            {data.top_tracks.length > 0 && (
+              <>
+                <Button icon={<Play size={15} fill="white" />} onClick={() => playTrack(topTracks[0], topTracks, 0)}>
+                  Lecture
+                </Button>
+                <Button variant="secondary" icon={<Shuffle size={15} />} onClick={() => playShuffled(topTracks)}>
+                  Aléatoire
+                </Button>
+              </>
+            )}
+            <Button variant="secondary" icon={<MoreHorizontal size={15} />} onClick={metaMenu.open} aria-label="Plus d'options" />
+          </div>
+          {metaMenu.isOpen && metaMenu.pos && (
+            <MenuDropdown pos={metaMenu.pos} onClose={metaMenu.close} items={metaItems} />
           )}
         </div>
       </div>
@@ -780,7 +869,17 @@ function ArtistDetailView({ artistId }: { artistId: string }) {
       {data.biography && (
         <div className="mb-8 max-w-2xl">
           <h3 className="text-sm font-semibold text-text-primary mb-2">Biographie</h3>
-          <p className="text-sm text-text-secondary leading-relaxed line-clamp-4">{data.biography}</p>
+          <p className={`text-sm text-text-secondary leading-relaxed ${bioExpanded ? '' : 'line-clamp-4'}`}>
+            {data.biography}
+          </p>
+          {data.biography.length > 280 && (
+            <button
+              onClick={() => setBioExpanded(v => !v)}
+              className="text-xs text-primary hover:underline mt-1"
+            >
+              {bioExpanded ? 'Réduire' : 'Lire la suite'}
+            </button>
+          )}
         </div>
       )}
 
@@ -863,16 +962,16 @@ export default function ListenPage() {
 
   return (
     <div className="flex flex-col h-full" style={DARK_PAGE}>
-      {/* Dark hero banner (Spotify/Deezer-style) + pill tabs */}
+      {/* Dark hero banner + pill tabs */}
       <div className="flex-shrink-0 relative overflow-hidden"
            style={{ background: 'linear-gradient(135deg, #1b1730 0%, #241a3a 55%, #181527 100%)' }}>
         <div className="absolute inset-0 pointer-events-none"
-             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(139,92,246,0.38) 0%, rgba(217,70,239,0.14) 38%, rgba(0,0,0,0) 72%)' }} />
+             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(47,125,255,0.38) 0%, rgba(47,125,255,0.12) 38%, rgba(0,0,0,0) 72%)' }} />
         <div className="relative px-6 pt-6 pb-6">
           <div className="flex items-end justify-between mb-5">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                   style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                   style={{ background: 'linear-gradient(135deg, #5aa0ff, #1f66e8)' }}>
                 <Music className="w-6 h-6 text-white" />
               </div>
               <div>

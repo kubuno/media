@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.tv_shows\n           SET name           = $2,\n               overview       = $3,\n               poster_path    = $4,\n               first_air_date = $5,\n               status         = $6,\n               genres         = $7,\n               networks       = $8,\n               tvmaze_id      = $9,\n               backdrop_path  = COALESCE($10, backdrop_path),\n               vote_average   = COALESCE(CAST($11::float8 AS numeric(3,1)), vote_average),\n               vote_count     = COALESCE($12, vote_count),\n               meta_status    = 'ready',\n               meta_retries   = 0,\n               updated_at     = NOW()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Text",
+        "Text",
+        "Date",
+        "Varchar",
+        "TextArray",
+        "TextArray",
+        "Int4",
+        "Text",
+        "Float8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "742cca865a67b73a95c75fe8c7978f3a0674c0a5d87503fbcd2f87cbbe864438"
+}

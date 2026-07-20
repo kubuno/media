@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.tv_shows\n           SET name          = $2,\n               overview      = COALESCE(NULLIF($3, ''), overview),\n               poster_path   = COALESCE($4, poster_path),\n               backdrop_path = COALESCE($5, backdrop_path),\n               vote_average  = COALESCE(CAST($6::float8 AS numeric(3,1)), vote_average),\n               vote_count    = COALESCE($7, vote_count),\n               genres        = CASE WHEN cardinality($8::text[]) > 0 THEN $8 ELSE genres END,\n               networks      = CASE WHEN cardinality($9::text[]) > 0 THEN $9 ELSE networks END,\n               cast_json     = CASE WHEN jsonb_array_length($10) > 0 THEN $10 ELSE cast_json END,\n               updated_at    = NOW()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Text",
+        "Text",
+        "Text",
+        "Float8",
+        "Int4",
+        "TextArray",
+        "TextArray",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11c794241812b3fad9ec7a8f442204555a0202665b7ebbf8bd068551abf45ce6"
+}
