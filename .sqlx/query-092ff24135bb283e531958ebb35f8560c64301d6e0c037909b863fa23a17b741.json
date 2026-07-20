@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.tracks\n               (library_id, file_path, file_size, title, duration_secs,\n                codec, bitrate, sample_rate, channels, artist_id, album_id,\n                track_number, disc_number, composer, lyricist)\n               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)\n               ON CONFLICT (file_path) DO UPDATE\n               SET artist_id    = EXCLUDED.artist_id,\n                   album_id     = EXCLUDED.album_id,\n                   title        = EXCLUDED.title,\n                   track_number = COALESCE(EXCLUDED.track_number, media.tracks.track_number),\n                   disc_number  = EXCLUDED.disc_number,\n                   composer     = COALESCE(EXCLUDED.composer, media.tracks.composer),\n                   lyricist     = COALESCE(EXCLUDED.lyricist, media.tracks.lyricist)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8",
+        "Varchar",
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "092ff24135bb283e531958ebb35f8560c64301d6e0c037909b863fa23a17b741"
+}

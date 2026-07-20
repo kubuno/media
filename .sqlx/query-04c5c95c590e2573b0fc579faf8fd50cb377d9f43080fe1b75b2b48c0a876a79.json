@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media.tv_recent (user_id, channel_id) VALUES ($1, $2)\n           ON CONFLICT (user_id, channel_id) DO UPDATE SET played_at = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "04c5c95c590e2573b0fc579faf8fd50cb377d9f43080fe1b75b2b48c0a876a79"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.albums SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "65adf072f53cca2bc5e4850935dd966406807059b8ec13f4b54a2dced79091dd"
+}

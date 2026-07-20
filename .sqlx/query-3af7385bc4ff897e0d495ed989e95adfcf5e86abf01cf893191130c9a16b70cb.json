@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.artists\n           SET name        = $2,\n               sort_name   = COALESCE($3, sort_name),\n               artist_type = COALESCE($4, artist_type),\n               country     = COALESCE($5, country),\n               begin_date  = COALESCE($6, begin_date),\n               end_date    = COALESCE($7, end_date),\n               genres      = CASE WHEN cardinality($8::text[]) > 0 THEN $8 ELSE genres END,\n               biography   = COALESCE($9, biography),\n               image_path  = COALESCE($10, image_path),\n               meta_status = 'ready',\n               meta_retries = 0,\n               updated_at  = NOW()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Date",
+        "Date",
+        "TextArray",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3af7385bc4ff897e0d495ed989e95adfcf5e86abf01cf893191130c9a16b70cb"
+}

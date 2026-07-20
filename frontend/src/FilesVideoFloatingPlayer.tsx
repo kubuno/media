@@ -79,14 +79,14 @@ function MiniPlayer({ file, isPlaying, onToggle, onRestore, onClose }: MiniProps
       style={{ bottom: 16, right: 16, zIndex: zIdx, maxWidth: 340 }}
       onMouseDown={onMouseDown}
     >
-      <Film size={16} className="text-purple-400 flex-shrink-0" />
+      <Film size={16} className="text-blue-400 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white truncate leading-tight">{file.name}</p>
         <p className="text-xs text-white/50 truncate">{formatSize(file.size_bytes)}</p>
       </div>
       <button
         onClick={e => { e.stopPropagation(); onToggle() }}
-        className="w-8 h-8 rounded-full bg-purple-500 hover:bg-purple-600 text-white
+        className="w-8 h-8 rounded-full bg-blue-500 hover:bg-blue-600 text-white
                    flex items-center justify-center transition-colors flex-shrink-0"
       >
         {isPlaying ? <Pause size={14} fill="white" /> : <Play size={14} fill="white" className="ml-px" />}
@@ -163,7 +163,7 @@ function ProgressBar({ current, duration, onSeek }: ProgressProps) {
       }}
       onMouseLeave={() => setHovX(null)}
     >
-      <div className="absolute inset-y-0 left-0 rounded-full bg-purple-400 transition-none" style={{ width: `${pct}%` }} />
+      <div className="absolute inset-y-0 left-0 rounded-full bg-blue-400 transition-none" style={{ width: `${pct}%` }} />
       <div
         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white shadow
                    opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
@@ -387,7 +387,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
     <>
       <FloatingWindow
         title={file.name}
-        icon={<Film size={15} className="text-purple-500" />}
+        icon={<Film size={15} className="text-blue-500" />}
         onClose={handleClose}
         defaultWidth={720}
         defaultHeight={480}
@@ -496,7 +496,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
                 <button
                   onClick={toggleLoop}
                   className={`p-1.5 rounded transition-colors flex-shrink-0 ${
-                    isLooping ? 'text-purple-400' : 'text-white/55 hover:text-white'
+                    isLooping ? 'text-blue-400' : 'text-white/55 hover:text-white'
                   }`}
                   title={t('media_player_loop')}
                 ><Repeat size={14} /></button>
@@ -529,7 +529,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
                           onClick={e => { e.stopPropagation(); changeRate(s) }}
                           className={`block w-full px-4 py-1.5 text-xs text-left transition-colors ${
                             playbackRate === s
-                              ? 'bg-purple-500/25 text-purple-300'
+                              ? 'bg-blue-500/25 text-blue-300'
                               : 'text-white/80 hover:bg-white/10 hover:text-white'
                           }`}
                         >

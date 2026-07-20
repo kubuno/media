@@ -36,6 +36,26 @@ pub async fn master_playlist(
 }
 
 /// Renvoie la playlist M3U8 d'une qualité, démarrant la transcription si nécessaire.
+/// Resolve a playable video file by id: a movie first, else a TV episode.
+async fn video_file_path(db: &sqlx::PgPool, id: Uuid) -> Result<Option<String>, sqlx::Error> {
+    let movie: Option<String> = sqlx::query_scalar!(
+        "SELECT file_path FROM media.movies WHERE id = $1",
+        id
+    )
+    .fetch_optional(db)
+    .await?;
+    if movie.is_some() {
+        return Ok(movie);
+    }
+    let episode: Option<Option<String>> = sqlx::query_scalar!(
+        r#"SELECT file_path AS "file_path?" FROM media.tv_episodes WHERE id = $1"#,
+        id
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(episode.flatten())
+}
+
 pub async fn quality_playlist(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -45,12 +65,7 @@ pub async fn quality_playlist(
     let playlist_path = hls::playlist_path(cache, &item_id.to_string(), &quality);
 
     if !playlist_path.exists() {
-        let file_path: Option<String> = sqlx::query_scalar!(
-            "SELECT file_path FROM media.movies WHERE id = $1",
-            item_id
-        )
-        .fetch_optional(&state.db)
-        .await?;
+        let file_path = video_file_path(&state.db, item_id).await?;
 
         let Some(src) = file_path else {
             return Err(MediaError::NotFound(format!("Item {item_id}")));
@@ -110,15 +125,9 @@ pub async fn direct_stream(
     Path(item_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Response, MediaError> {
-    let file_path: Option<String> = sqlx::query_scalar!(
-        "SELECT file_path FROM media.movies WHERE id = $1",
-        item_id
-    )
-    .fetch_optional(&state.db)
-    .await?;
-
-    let path = file_path
-        .ok_or_else(|| MediaError::NotFound(format!("Film {item_id}")))?;
+    let path = video_file_path(&state.db, item_id)
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Vidéo {item_id}")))?;
 
     let range = range_header(&headers);
     serve_ranged(std::path::Path::new(&path), "video/mp4", range.as_deref()).await

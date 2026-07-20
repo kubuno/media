@@ -38,6 +38,11 @@ pub async fn get_settings(
 #[derive(Debug, Deserialize)]
 pub struct PatchSettingsBody {
     pub metadata_language: Option<String>,
+    /// Official TMDB API key (v3 key or v4 read token) — the primary
+    /// movie/show metadata provider when set.
+    pub tmdb_api_key:      Option<String>,
+    /// OMDb API key — Rotten Tomatoes / IMDb / Metacritic ratings relay.
+    pub omdb_api_key:      Option<String>,
 }
 
 pub async fn patch_settings(
@@ -52,6 +57,26 @@ pub async fn patch_settings(
             "INSERT INTO media.settings (key, value) VALUES ('metadata_language', $1)
              ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
             lang,
+        )
+        .execute(&state.db)
+        .await?;
+    }
+
+    if let Some(key) = body.tmdb_api_key {
+        sqlx::query!(
+            "INSERT INTO media.settings (key, value) VALUES ('tmdb_api_key', $1)
+             ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+            key.trim(),
+        )
+        .execute(&state.db)
+        .await?;
+    }
+
+    if let Some(key) = body.omdb_api_key {
+        sqlx::query!(
+            "INSERT INTO media.settings (key, value) VALUES ('omdb_api_key', $1)
+             ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+            key.trim(),
         )
         .execute(&state.db)
         .await?;
@@ -87,7 +112,23 @@ pub async fn trigger_enrich(
     .await?
     .rows_affected();
 
-    let count = reset_movies + reset_shows;
+    let reset_artists = sqlx::query(
+        "UPDATE media.artists SET meta_status = 'pending_meta'
+         WHERE meta_status = 'error_meta'",
+    )
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+
+    let reset_albums = sqlx::query(
+        "UPDATE media.albums SET meta_status = 'pending_meta'
+         WHERE meta_status = 'error_meta'",
+    )
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+
+    let count = reset_movies + reset_shows + reset_artists + reset_albums;
 
     let db2  = state.db.clone();
     let s2   = state.settings.clone();
@@ -97,6 +138,12 @@ pub async fn trigger_enrich(
         }
         if let Err(e) = crate::workers::metadata::enrich_pending_shows(&db2, &s2).await {
             tracing::error!(error = %e, "Erreur enrichissement séries");
+        }
+        if let Err(e) = crate::workers::metadata::enrich_pending_artists(&db2, &s2).await {
+            tracing::error!(error = %e, "Erreur enrichissement artistes");
+        }
+        if let Err(e) = crate::workers::metadata::enrich_pending_albums(&db2, &s2).await {
+            tracing::error!(error = %e, "Erreur enrichissement albums");
         }
     });
 

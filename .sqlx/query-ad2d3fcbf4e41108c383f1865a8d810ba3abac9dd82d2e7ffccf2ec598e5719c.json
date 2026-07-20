@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.title, ar.name AS \"artist_name?\"\n           FROM media.albums a\n           LEFT JOIN media.artists ar ON ar.id = a.artist_id\n           WHERE NOT a.meta_locked\n             AND (a.meta_status = 'pending_meta'\n                  OR (a.meta_status = 'error_meta' AND a.meta_retries < 3\n                      AND a.updated_at < NOW() - INTERVAL '1 hour'))\n             AND a.title <> ''\n           ORDER BY a.created_at DESC\n           LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "artist_name?",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ad2d3fcbf4e41108c383f1865a8d810ba3abac9dd82d2e7ffccf2ec598e5719c"
+}

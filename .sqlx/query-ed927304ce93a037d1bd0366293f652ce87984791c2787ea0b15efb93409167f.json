@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.movies\n               SET ratings_json = $2,\n                   poster_path  = COALESCE(poster_path, $3),\n                   poster_urls  = CASE WHEN $3::text IS NOT NULL AND NOT ($3 = ANY(poster_urls))\n                                       THEN array_append(poster_urls, $3)\n                                       ELSE poster_urls END\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ed927304ce93a037d1bd0366293f652ce87984791c2787ea0b15efb93409167f"
+}

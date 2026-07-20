@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.albums SET meta_status = 'error_meta', meta_retries = meta_retries + 1 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "343ced70588e81a9af8584d32d3973afd5082d6fb9b0904ff4587c996206d034"
+}

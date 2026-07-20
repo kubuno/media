@@ -99,7 +99,7 @@ function CoverArt({ url, size = 48 }: { url?: string; size?: number }) {
       {url ? (
         <img src={url} alt="" className="w-full h-full object-cover" />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/35 via-primary/15 to-fuchsia-400/10">
+        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/35 via-primary/15 to-transparent">
           <div className="absolute inset-0 opacity-60"
                style={{ background: 'radial-gradient(circle at 30% 25%, rgba(255,255,255,.45), transparent 55%)' }} />
           <Music size={size * 0.32} className="relative text-primary/70" strokeWidth={1.6} />
@@ -161,7 +161,7 @@ function ProgressBar({ position, duration, onSeek }: {
       }}
     >
       <div
-        className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary to-fuchsia-500"
+        className="absolute inset-y-0 left-0 rounded-full bg-primary"
         style={{ width: `${pct}%`, transition: `width ${motion}` }}
       />
       {/* Thumb: fixed-size circle promoted to its own GPU layer (translateZ) so it
@@ -377,7 +377,7 @@ function LyricsPanel() {
   return (
     <div
       className="h-full w-full flex flex-col"
-      style={{ background: 'radial-gradient(120% 80% at 50% 0%, #1e1b4b 0%, #0b1020 70%)', color: '#fff' }}
+      style={{ background: 'radial-gradient(120% 80% at 50% 0%, #20222a 0%, #0d0e11 70%)', color: '#fff' }}
     >
       <h3 className="text-sm font-semibold text-white px-3 py-2.5 border-b border-white/10 flex items-center gap-2 shrink-0">
         <Mic2 size={15} className="text-white/60" /> Paroles
@@ -412,7 +412,7 @@ function LyricsPanel() {
       {/* Discreet source credit */}
       {data?.source && data?.lyrics && (
         <div className="shrink-0 px-4 py-1.5 border-t border-white/10 text-[11px] text-white/40 flex items-center gap-1">
-          {synced && <span className="text-violet-300">●</span>}
+          {synced && <span className="text-blue-300">●</span>}
           Source : {data.source}
         </div>
       )}
@@ -481,7 +481,7 @@ function CenterContent() {
         </button>
         <button
           onClick={togglePlay}
-          className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-fuchsia-600 text-white flex items-center justify-center
+          className="w-16 h-16 rounded-full bg-primary hover:bg-primary-hover text-white flex items-center justify-center
                      shadow-xl shadow-primary/40 hover:shadow-2xl hover:shadow-primary/50 hover:scale-105 active:scale-95 transition-all"
         >
           {isPlaying ? <Pause size={26} fill="white" /> : <Play size={26} fill="white" className="ml-1" />}
@@ -621,11 +621,20 @@ function FullPlayer({ onMinimize, onClose }: {
     </>
   )
 
+  // Desktop pop-out: a track coming from Drive (files→media bridge) detaches to
+  // the standalone /drive/player?file=<id> page; media library tracks have no
+  // dedicated route (yet).
+  const driveFileMatch = currentTrack.streamUrl?.match(/^\/api\/v1\/drive\/([0-9a-f-]{36})\/download$/)
+  const popout = driveFileMatch
+    ? { route: `/drive/player?file=${driveFileMatch[1]}`, label: currentTrack.title, width: 1080, height: 760 }
+    : undefined
+
   return (
     <FloatingWindow
       title={currentTrack.title}
       icon={<Music size={15} />}
       onClose={onClose}
+      popout={popout}
       defaultWidth={totalWidth}
       defaultHeight={610}
       minWidth={CENTER_W}
@@ -667,7 +676,7 @@ function FullPlayer({ onMinimize, onClose }: {
           <div className="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
             {currentTrack?.coverUrl
               ? <img src={currentTrack.coverUrl} alt="" className="w-full h-full object-cover blur-3xl scale-150 opacity-40" />
-              : <div className="w-full h-full bg-gradient-to-br from-primary/20 via-fuchsia-400/10 to-transparent" />}
+              : <div className="w-full h-full bg-gradient-to-br from-primary/20 to-transparent" />}
             <div className="absolute inset-0 bg-gradient-to-b from-surface-0/55 via-surface-0/85 to-surface-0" />
           </div>
           <CenterContent />

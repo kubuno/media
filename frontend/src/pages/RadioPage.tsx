@@ -302,12 +302,12 @@ export default function RadioPage() {
       <div className="flex-shrink-0 relative overflow-hidden"
            style={{ background: 'linear-gradient(135deg, #1b1730 0%, #241a3a 55%, #181527 100%)' }}>
         <div className="absolute inset-0 pointer-events-none"
-             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(139,92,246,0.38) 0%, rgba(217,70,239,0.14) 38%, rgba(0,0,0,0) 72%)' }} />
+             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(47,125,255,0.38) 0%, rgba(47,125,255,0.12) 38%, rgba(0,0,0,0) 72%)' }} />
         <div className="relative px-6 pt-6 pb-6">
           <div className="flex items-end justify-between mb-5">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                   style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                   style={{ background: 'linear-gradient(135deg, #5aa0ff, #1f66e8)' }}>
                 <Radio className="w-6 h-6 text-white" />
               </div>
               <div>

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.title, ar.name AS \"artist_name?\"\n           FROM media.albums a\n           LEFT JOIN media.artists ar ON ar.id = a.artist_id\n           WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "artist_name?",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "a35cd3407de55bac439284a5d1cf7d398d5e234d4121f879e374f90cebcf1c9d"
+}

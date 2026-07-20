@@ -9,3 +9,8 @@ pub mod wikidata;
 pub mod radio_catalog;
 pub mod lyrics;
 pub mod deezer;
+pub mod theaudiodb;
+pub mod nfo;
+pub mod covers;
+pub mod omdb;
+pub mod tv_catalog;

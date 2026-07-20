@@ -11,13 +11,13 @@ const THEMES: { id: Theme; label: string }[] = [
 ]
 
 // Unified blue → violet → fuchsia palette, matching the player's progress bar.
-const C = { blue: '#3b82f6', violet: '#8b5cf6', fuchsia: '#ec4899' }
+const C = { blue: '#2f7dff', light: '#5aa0ff', deep: '#1f66e8' }
 
 /** Vertical gradient (top → bottom) reused across themes. */
 function vgrad(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
   const g = ctx.createLinearGradient(x0, y0, x1, y1)
-  g.addColorStop(0,   C.fuchsia)
-  g.addColorStop(0.5, C.violet)
+  g.addColorStop(0,   C.deep)
+  g.addColorStop(0.5, C.light)
   g.addColorStop(1,   C.blue)
   return g
 }
@@ -27,7 +27,7 @@ function drawBars(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number, h:
   const step = Math.floor(data.length / barCount)
   const slot = w / barCount
   const bw   = Math.max(2, slot * 0.6)
-  ctx.shadowColor = C.violet
+  ctx.shadowColor = C.light
   ctx.shadowBlur  = 10
   for (let i = 0; i < barCount; i++) {
     const val  = data[i * step] / 255
@@ -52,7 +52,7 @@ function drawWaveform(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number
   ctx.lineWidth   = 2.5
   ctx.lineJoin    = 'round'
   ctx.strokeStyle = vgrad(ctx, 0, 0, w, 0)
-  ctx.shadowColor = C.violet
+  ctx.shadowColor = C.light
   ctx.shadowBlur  = 12
   ctx.beginPath()
   const sliceW = w / data.length
@@ -80,14 +80,14 @@ function drawCircular(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number
   const step  = Math.floor(data.length / count)
   ctx.lineWidth   = Math.max(2, (Math.PI * 2 * r) / count * 0.5)
   ctx.lineCap     = 'round'
-  ctx.shadowColor = C.fuchsia
+  ctx.shadowColor = C.deep
   ctx.shadowBlur  = 8
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 - Math.PI / 2
     const val   = data[i * step] / 255
     const outer = r + val * r * 1.1
     const t = i / count
-    ctx.strokeStyle = t < 0.5 ? C.violet : C.fuchsia
+    ctx.strokeStyle = t < 0.5 ? C.light : C.deep
     ctx.beginPath()
     ctx.moveTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r)
     ctx.lineTo(cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer)
@@ -107,16 +107,16 @@ function drawMirror(ctx: CanvasRenderingContext2D, data: Uint8Array, w: number, 
   const slot = w / barCount
   const bw   = Math.max(2, slot * 0.55)
   const mid  = h / 2
-  ctx.shadowColor = C.violet
+  ctx.shadowColor = C.light
   ctx.shadowBlur  = 8
   for (let i = 0; i < barCount; i++) {
     const val  = data[i * step] / 255
     const barH = Math.max(bw / 2, val * mid * 0.92)
     const x    = i * slot + (slot - bw) / 2
     const g = ctx.createLinearGradient(0, mid - barH, 0, mid + barH)
-    g.addColorStop(0,   C.fuchsia)
-    g.addColorStop(0.5, C.violet)
-    g.addColorStop(1,   C.fuchsia)
+    g.addColorStop(0,   C.deep)
+    g.addColorStop(0.5, C.light)
+    g.addColorStop(1,   C.deep)
     ctx.fillStyle = g
     ctx.beginPath()
     ctx.roundRect(x, mid - barH, bw, barH * 2, bw / 2)
@@ -152,8 +152,8 @@ export function VisualizerPanel() {
       // Paint our own dark background so the canvas is never transparent/white,
       // independent of any CSS behind it.
       const bg = ctx.createLinearGradient(0, 0, 0, h)
-      bg.addColorStop(0, '#1e1b4b')
-      bg.addColorStop(1, '#0b1020')
+      bg.addColorStop(0, '#20222a')
+      bg.addColorStop(1, '#0d0e11')
       ctx.fillStyle = bg
       ctx.fillRect(0, 0, w, h)
 
@@ -180,7 +180,7 @@ export function VisualizerPanel() {
   return (
     <div
       className="flex flex-col h-full select-none"
-      style={{ width: 280, background: 'radial-gradient(120% 80% at 50% 0%, #1e1b4b 0%, #0b1020 70%)' }}
+      style={{ width: 280, background: 'radial-gradient(120% 80% at 50% 0%, #20222a 0%, #0d0e11 70%)' }}
     >
       {/* Mode selector — segmented pills */}
       <div className="grid grid-cols-2 gap-1 p-2">

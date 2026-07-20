@@ -15,29 +15,29 @@ import { useDJStore, djEngine, djMasterAnalyser, djTrackPeaks, djStemReady, EQ_P
 import { mediaApi, formatDuration, posterUrl } from '../api'
 
 // ── Palette ─────────────────────────────────────────────────────────────────
-// Saturated indigo/violet "chassis" with dark "screens" (waveform/jog/VU) so the
-// neon accents really pop.
+// Hardware look: matte charcoal chassis (Pioneer-style) with neon deck accents.
+// Colour rules from the user: NO cyan, NO violet, NO pink — blue + orange lead,
+// amber for master/branding, green/yellow/red/white for the extra decks.
 
-const COL_A  = '#22d3ee'   // cyan    — deck A
-const COL_B  = '#fb5bac'   // magenta — deck B
-const ACCENT = '#a86bf0'   // violet  — master / branding / crossfader
+const COL_A  = '#2f7dff'   // electric blue — deck A
+const COL_B  = '#ff7a1a'   // orange        — deck B
+const ACCENT = '#ffb02e'   // amber         — master / branding / crossfader
 
-// Per-deck state field + accent colour (A/B keep the historic cyan/magenta).
 const DECK_FIELD = { A: 'deckA', B: 'deckB', C: 'deckC', D: 'deckD', E: 'deckE', F: 'deckF' } as const
 const DECK_COLOR: Record<DeckId, string> = {
-  A: '#22d3ee', B: '#fb5bac', C: '#7cf08a', D: '#ffb24d', E: '#b48bff', F: '#ff6b6b',
+  A: '#2f7dff', B: '#ff7a1a', C: '#3ddc84', D: '#ffd02e', E: '#ff5252', F: '#e8e9ee',
 }
 
 const UI = {
-  text:    '#eceefb',
-  soft:    '#c6cae8',
-  muted:   '#9095c2',   // balanced indigo grey
-  dim:     '#686d9e',
-  border:  '#3e4276',
-  border2: '#525791',
-  well:    '#101331',   // dark "screen" background
-  card:    '#2a2e5c',
-  card2:   '#353a72',
+  text:    '#f1f2f4',
+  soft:    '#c7c9ce',
+  muted:   '#8d9099',   // graphite grey
+  dim:     '#5d6069',
+  border:  '#34373e',
+  border2: '#4a4e57',
+  well:    '#08090b',   // dark "screen" background
+  card:    '#222429',
+  card2:   '#2c2f36',
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -88,10 +88,10 @@ const DJ_CSS = `
   .dj-lib-scroll::-webkit-scrollbar-track { background: transparent }
 `
 
-// Per-deck panel background: a colour-tinted slate gradient.
+// Per-deck panel background: charcoal chassis with a faint colour halo on top.
 function deckBg(color: string): string {
-  return `radial-gradient(130% 80% at 50% 0%, ${rgba(color, 0.22)} 0%, rgba(18,16,48,0) 60%),`
-       + ` linear-gradient(180deg, #282b5e 0%, #20234e 55%, #181a3c 100%)`
+  return `radial-gradient(130% 80% at 50% 0%, ${rgba(color, 0.10)} 0%, rgba(0,0,0,0) 60%),`
+       + ` linear-gradient(180deg, #26282e 0%, #1c1e23 55%, #141519 100%)`
 }
 
 // ── Knob ─────────────────────────────────────────────────────────────────────
@@ -139,30 +139,48 @@ function Knob({ value, min, max, onChange, label, size = 44, color = COL_A, unit
   }
 
   const display = value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1)
+  // Value arc (270°, from -135° to +135°) drawn under the cap.
+  const frac = (value - min) / (max - min)
 
   return (
     <div className="flex flex-col items-center gap-0.5 select-none" style={{ minWidth: size }}>
       <div
         ref={knobRef}
         className="relative cursor-pointer"
-        style={{ width: size, height: size, transform: `rotate(${rotation}deg)` }}
+        style={{ width: size, height: size }}
         onMouseDown={onMouseDown}
         onDoubleClick={() => onChange((min + max) / 2)}
         title="Double-clic : réinitialiser"
       >
-        <div className="absolute inset-0 rounded-full" style={{ border: `2px solid ${rgba(color, 0.32)}` }} />
-        <div className="absolute inset-1 rounded-full" style={{
-          background: 'radial-gradient(circle at 38% 30%, #4a5280, #242a48)',
-          boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.55)',
+        {/* Colored value arc around the cap */}
+        <div className="absolute inset-0 rounded-full" style={{
+          background: `conic-gradient(from 225deg, ${color} 0deg, ${color} ${frac * 270}deg, rgba(255,255,255,0.10) ${frac * 270}deg, rgba(255,255,255,0.10) 270deg, transparent 270deg)`,
+          WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))',
+          mask: 'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))',
+          filter: `drop-shadow(0 0 3px ${rgba(color, 0.5)})`,
         }} />
-        <div className="absolute" style={{
-          top: 3, left: '50%', marginLeft: -1,
-          width: 2, height: size * 0.26,
-          background: color, borderRadius: 1,
-          boxShadow: `0 0 6px ${rgba(color, 0.9)}`,
+        {/* Hardware-style cap: metal ring + rubber face */}
+        <div className="absolute rounded-full" style={{
+          inset: 3,
+          background: 'conic-gradient(from 210deg, #4a4e57, #23252b 25%, #3b3e46 50%, #1c1e23 75%, #4a4e57)',
+          boxShadow: '0 2px 5px rgba(0,0,0,0.6)',
         }} />
+        <div className="absolute rounded-full" style={{
+          inset: 5,
+          background: 'radial-gradient(circle at 36% 28%, #34373e, #17181c 72%)',
+          boxShadow: 'inset 0 1px 3px rgba(255,255,255,0.10), inset 0 -2px 5px rgba(0,0,0,0.7)',
+        }} />
+        {/* Position marker */}
+        <div className="absolute inset-0" style={{ transform: `rotate(${rotation}deg)` }}>
+          <div className="absolute" style={{
+            top: 6, left: '50%', marginLeft: -1,
+            width: 2, height: size * 0.24,
+            background: '#f4f5f7', borderRadius: 1,
+            boxShadow: `0 0 5px ${rgba(color, 0.8)}`,
+          }} />
+        </div>
       </div>
-      <p style={{ color: UI.muted, fontSize: 9, textAlign: 'center', letterSpacing: 0.5 }}>{label}</p>
+      <p style={{ color: UI.muted, fontSize: 9, textAlign: 'center', letterSpacing: 0.8, fontWeight: 600 }}>{label}</p>
       <p style={{ color, fontSize: 9, fontFamily: 'monospace', textAlign: 'center' }}>{display}{unit}</p>
     </div>
   )
@@ -170,20 +188,147 @@ function Knob({ value, min, max, onChange, label, size = 44, color = COL_A, unit
 
 // ── Vertical fader ────────────────────────────────────────────────────────────
 
-function VertFader({ value, onChange, height = 96, color = COL_A }: {
+function VertFader({ value, onChange, height = 96, color = COL_A, min = 0, max = 1, step = 0.01, center = false }: {
   value: number; onChange: (v: number) => void; height?: number | string; color?: string
+  min?: number; max?: number; step?: number
+  /** Bipolaire (TEMPO) : le niveau se dessine depuis le centre, pas depuis le bas. */
+  center?: boolean
 }) {
+  // Hardware-style fader: dark groove + colored level + ribbed cap.
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  const valueFromY = useCallback((clientY: number) => {
+    const rect = trackRef.current!.getBoundingClientRect()
+    const f = Math.max(0, Math.min(1, 1 - (clientY - rect.top) / rect.height))
+    const snapped = Math.round((min + f * (max - min)) / step) * step
+    return Math.max(min, Math.min(max, Math.round(snapped * 1000) / 1000))
+  }, [min, max, step])
+
+  function onPointerDown(e: React.PointerEvent) {
+    e.preventDefault()
+    onChange(valueFromY(e.clientY))
+    const move = (ev: PointerEvent) => onChange(valueFromY(ev.clientY))
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const frac = (value - min) / (max - min)           // 0 (bas) → 1 (haut)
+  const fillFrom = center ? 0.5 : 0
+  const fillLo = Math.min(fillFrom, frac), fillHi = Math.max(fillFrom, frac)
+
   return (
-    <RangeSlider
-      orientation="vertical"
-      min={0} max={1} step={0.01}
-      value={value}
-      onChange={onChange}
-      accent={color}
-      trackColor="rgba(255,255,255,0.15)"
-      style={{ height } as React.CSSProperties}
-      aria-label="Volume fader"
-    />
+    <div
+      ref={trackRef}
+      onPointerDown={onPointerDown}
+      role="slider" aria-valuemin={min} aria-valuemax={max} aria-valuenow={Math.round(value * 100) / 100}
+      aria-label="Fader" aria-orientation="vertical"
+      className="relative select-none cursor-pointer"
+      style={{ height, width: 26, touchAction: 'none' }}
+    >
+      {/* Rainure */}
+      <div className="absolute rounded-full" style={{
+        left: '50%', marginLeft: -3, top: 2, bottom: 2, width: 6,
+        background: '#0a0b0d',
+        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.06)',
+      }} />
+      {/* Niveau (sous le capuchon) */}
+      <div className="absolute rounded-full" style={{
+        left: '50%', marginLeft: -2, width: 4,
+        bottom: `${fillLo * 100}%`,
+        height: `${(fillHi - fillLo) * 100}%`,
+        background: `linear-gradient(180deg, ${color}, ${rgba(color, 0.55)})`,
+        boxShadow: `0 0 6px ${rgba(color, 0.45)}`,
+      }} />
+      {/* Graduations */}
+      {[0.25, 0.5, 0.75].map(f => (
+        <div key={f} className="absolute" style={{
+          left: 0, right: 0, top: `${(1 - f) * 100}%`, height: 1,
+          background: f === 0.5 && center ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.09)',
+        }} />
+      ))}
+      {/* Ribbed cap */}
+      <div className="absolute rounded-[3px]" style={{
+        left: '50%', marginLeft: -13, width: 26, height: 15,
+        top: `calc(${(1 - frac) * 100}% - 7px)`,
+        background: 'linear-gradient(180deg, #3c3f47 0%, #23252b 45%, #17181c 55%, #2c2f36 100%)',
+        border: '1px solid #0c0d10',
+        boxShadow: `0 2px 5px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.14)`,
+      }}>
+        <div className="absolute" style={{
+          left: 3, right: 3, top: '50%', marginTop: -1, height: 2,
+          background: color, borderRadius: 1, boxShadow: `0 0 5px ${rgba(color, 0.8)}`,
+        }} />
+      </div>
+    </div>
+  )
+}
+
+// Hardware-style horizontal crossfader (groove + ribbed cap, no fill).
+function HorizFader({ value, onChange, color = ACCENT, min = -1, max = 1, step = 0.01, width, height = 26, label = 'Fader' }: {
+  value: number; onChange: (v: number) => void; color?: string; min?: number; max?: number; step?: number
+  width?: number | string; height?: number; label?: string
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const valueFromX = useCallback((clientX: number) => {
+    const rect = trackRef.current!.getBoundingClientRect()
+    const f = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const snapped = Math.round((min + f * (max - min)) / step) * step
+    return Math.max(min, Math.min(max, Math.round(snapped * 1000) / 1000))
+  }, [min, max, step])
+
+  function onPointerDown(e: React.PointerEvent) {
+    e.preventDefault()
+    onChange(valueFromX(e.clientX))
+    const move = (ev: PointerEvent) => onChange(valueFromX(ev.clientX))
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const frac = (value - min) / (max - min)
+  const capW = Math.max(11, Math.round(height * 0.58))
+  return (
+    <div
+      ref={trackRef}
+      onPointerDown={onPointerDown}
+      role="slider" aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}
+      aria-label={label}
+      className={width == null ? 'relative select-none cursor-pointer w-full shrink-0' : 'relative select-none cursor-pointer shrink-0'}
+      style={{ height, width, touchAction: 'none' }}
+    >
+      <div className="absolute rounded-full" style={{
+        top: '50%', marginTop: -3, left: 2, right: 2, height: 6,
+        background: '#0a0b0d',
+        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.06)',
+      }} />
+      {/* Tick marks (center emphasized) */}
+      {[0.25, 0.5, 0.75].map(f => (
+        <div key={f} className="absolute" style={{
+          top: 2, bottom: 2, left: `${f * 100}%`, width: 1,
+          background: f === 0.5 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.09)',
+        }} />
+      ))}
+      {/* Ribbed cap (vertical ridges) */}
+      <div className="absolute rounded-[3px]" style={{
+        top: '50%', marginTop: -height / 2, width: capW, height,
+        left: `calc(${frac * 100}% - ${capW / 2}px)`,
+        background: 'linear-gradient(90deg, #3c3f47 0%, #23252b 45%, #17181c 55%, #2c2f36 100%)',
+        border: '1px solid #0c0d10',
+        boxShadow: `0 2px 5px rgba(0,0,0,0.65), inset 1px 0 0 rgba(255,255,255,0.14)`,
+      }}>
+        <div className="absolute" style={{
+          top: 3, bottom: 3, left: '50%', marginLeft: -1, width: 2,
+          background: color, borderRadius: 1, boxShadow: `0 0 5px ${rgba(color, 0.8)}`,
+        }} />
+      </div>
+    </div>
   )
 }
 
@@ -377,7 +522,7 @@ function DJWaveform({ analyser, position, duration, color, onSeek, height = 84, 
               const cells = Math.max(3, Math.floor(H / 6))
               const lit = Math.round(v * cells)
               for (let c = 0; c < lit; c++) {
-                const cl = c < 2 ? '#ff3b6b' : c < 4 ? '#ffb020' : color
+                const cl = c < 2 ? '#ff4444' : c < 4 ? '#ffb020' : color
                 ctx.fillStyle = rgba(cl, 0.4 + 0.6 * (c / cells))
                 ctx.fillRect(i * bW + 0.5, H - (c + 1) * (H / cells) + 1, bW - 1.5, H / cells - 1.5)
               }
@@ -612,57 +757,50 @@ function JogWheel({ isPlaying, position, duration, color, size = 122,
         />
       </svg>
 
-      {/* Outer ring — spins with playback, follows the hand while scratching */}
+      {/* Outer neon halo (deck color) */}
+      <div className="absolute inset-0 rounded-full pointer-events-none" style={{
+        boxShadow: (isPlaying || grab)
+          ? `0 0 22px ${rgba(color, 0.55)}, 0 0 44px ${rgba(color, 0.18)}`
+          : `0 0 10px ${rgba(color, 0.22)}`,
+        border: `2px solid ${rgba(color, grab ? 0.95 : isPlaying ? 0.8 : 0.45)}`,
+        transition: 'box-shadow 0.3s, border-color 0.15s',
+      }} />
+
+      {/* Vinyl platter — spins during playback, follows the hand while scratching */}
       <div
-        className="absolute inset-0 rounded-full pointer-events-none"
+        className="absolute rounded-full pointer-events-none"
         style={{
-          border: `2px solid ${rgba(color, grab ? 0.85 : 0.5)}`,
-          boxShadow: (isPlaying || grab) ? `0 0 18px ${rgba(color, 0.35)}` : 'none',
-          transition: 'box-shadow 0.3s, border-color 0.15s',
+          inset: 4,
+          background:
+            // Reflet glossy discret en travers du disque (fondu progressif)
+            'conic-gradient(from 130deg, rgba(255,255,255,0) 0deg, rgba(255,255,255,0.05) 25deg, rgba(255,255,255,0) 55deg, rgba(255,255,255,0) 170deg, rgba(255,255,255,0.04) 200deg, rgba(255,255,255,0) 235deg),'
+            // Sillons du vinyle
+          + ' repeating-radial-gradient(circle at 50% 50%, #0c0d10 0px, #17181c 1.5px, #0c0d10 3px),'
+          + ' radial-gradient(circle at 50% 50%, #17181c, #0a0b0d)',
+          boxShadow: 'inset 0 2px 12px rgba(0,0,0,0.8)',
           ...ringStyle,
         }}
       >
-        {Array.from({ length: 12 }, (_, i) => (
-          <div key={i} className="absolute" style={{
-            width: 2, height: i % 3 === 0 ? 8 : 4,
-            top: 2, left: '50%', marginLeft: -1,
-            transformOrigin: `0 ${size / 2 - 4}px`,
-            transform: `rotate(${i * 30}deg)`,
-            background: i % 3 === 0 ? color : rgba('#ffffff', 0.3),
-            borderRadius: 1,
-          }} />
-        ))}
+        {/* Rotation marker on the platter edge */}
+        <div className="absolute" style={{
+          top: 3, left: '50%', marginLeft: -1.5, width: 3, height: 9,
+          background: color, borderRadius: 2, boxShadow: `0 0 6px ${rgba(color, 0.9)}`,
+        }} />
       </div>
 
-      {/* Inner disk — rotates under the finger while scratching */}
-      <div className="absolute rounded-full pointer-events-none" style={{
-        inset: 14,
-        background: 'radial-gradient(circle at 38% 32%, #3b4368, #232a48)',
-        boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.6)',
-        transform: `rotate(${grab ? manualRot : 0}deg)`,
+      {/* Center label — outside the rotating platter so the time stays readable */}
+      <div className="absolute rounded-full flex flex-col items-center justify-center pointer-events-none" style={{
+        inset: '29%',
+        background: `radial-gradient(circle at 38% 30%, #26282e, #131418 75%)`,
+        border: `2px solid ${rgba(color, 0.55)}`,
+        boxShadow: `0 0 16px ${rgba(color, 0.30)}, inset 0 1px 0 rgba(255,255,255,0.08)`,
       }}>
-        {/* Groove rings */}
-        {[0.82, 0.68, 0.54].map((f, i) => (
-          <div key={i} className="absolute rounded-full" style={{
-            inset: `${(1 - f) * 50}%`,
-            border: `1px solid ${rgba('#ffffff', 0.06)}`,
-          }} />
-        ))}
-
-        {/* Center label — counter-rotated so the time stays upright while scratching */}
-        <div className="absolute rounded-full flex flex-col items-center justify-center" style={{
-          inset: '26%',
-          background: 'radial-gradient(circle at 38% 35%, #2b3358, #1c2240)',
-          boxShadow: `0 0 14px ${rgba(color, 0.28)}`,
-          transform: `rotate(${grab ? -manualRot : 0}deg)`,
-        }}>
-          <p style={{ color, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, letterSpacing: 1 }}>
-            {fmt(position)}
-          </p>
-          <p style={{ color: UI.dim, fontSize: 8, fontFamily: 'monospace' }}>
-            {fmtR(position, duration)}
-          </p>
-        </div>
+        <p style={{ color, fontSize: 11, fontFamily: 'monospace', fontWeight: 700, letterSpacing: 1 }}>
+          {fmt(position)}
+        </p>
+        <p style={{ color: UI.dim, fontSize: 8, fontFamily: 'monospace' }}>
+          {fmtR(position, duration)}
+        </p>
       </div>
     </div>
   )
@@ -676,6 +814,9 @@ const PAD_MODES: [PadMode, string][] = [
   ['sliploop', 'SLIP LOOP'],
   ['beatjump', 'BEAT JUMP'],
 ]
+
+// Fixed multi-colour pad palette (controller look) — no cyan/violet/pink.
+const PAD_PALETTE = ['#2f7dff', '#ff7a1a', '#3ddc84', '#ffd02e', '#ff5252', '#8fd14f', '#ff9f43', '#e8e9ee']
 
 // Labels shown on the 8 pads for each mode.
 const PAD_LABELS: Record<PadMode, string[]> = {
@@ -707,7 +848,7 @@ function PadGrid({ deck, color, st, onMode, onTrigger, onRelease, onDelete }: {
           onChange={e => setHotCueLabel(deck, i, e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') setCueCtx(null) }}
           className="w-full rounded outline-none"
-          style={{ background: '#1b2138', color: '#e6e6f0', border: '1px solid #454545', fontSize: 12, padding: '3px 6px', margin: '2px 0' }} />
+          style={{ background: '#16181d', color: '#e6e6f0', border: '1px solid #454545', fontSize: 12, padding: '3px 6px', margin: '2px 0' }} />
       ) },
       { type: 'submenu', label: 'Couleur', items: HOT_CUE_COLORS.map((c, ci) => ({
         type: 'action', label: `Couleur ${ci + 1}`, icon: <span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }} />,
@@ -735,12 +876,12 @@ function PadGrid({ deck, color, st, onMode, onTrigger, onRelease, onDelete }: {
         ))}
       </div>
 
-      {/* 8 pads */}
+      {/* 8 pads — full controller-style colors (blue/orange/green/yellow/red) */}
       <div className="grid grid-cols-4 gap-1">
         {labels.map((lbl, i) => {
           const cue = mode === 'hotcue' ? st.hotCues[i] : null
-          const lit = mode === 'hotcue' ? !!cue : false
-          const padColor = cue?.color ?? color
+          const lit = mode !== 'hotcue' || !!cue        // unset hot cue = unlit pad
+          const padColor = cue?.color ?? PAD_PALETTE[i]
           return (
             <button
               key={i}
@@ -750,13 +891,20 @@ function PadGrid({ deck, color, st, onMode, onTrigger, onRelease, onDelete }: {
               title={mode === 'hotcue'
                 ? (cue ? `${cue.label || `Point ${i+1}`} — ${fmt(cue.position)}\nClic droit : options` : `Définir point ${i+1}`)
                 : labels[i]}
-              className="h-8 rounded font-bold transition-all active:scale-95 truncate px-1"
-              style={{
+              className="h-8 rounded-md font-extrabold transition-all active:scale-95 active:brightness-125 truncate px-1"
+              style={lit ? {
                 fontSize: cue?.label ? 8.5 : 10,
-                background: lit ? rgba(padColor, 0.26) : rgba(color, 0.08),
-                border: `1px solid ${lit ? padColor : rgba(color, 0.3)}`,
-                color: lit ? padColor : rgba(color, 0.85) as string,
-                boxShadow: lit ? `0 0 7px ${rgba(padColor, 0.35)}` : 'none',
+                background: `linear-gradient(180deg, ${padColor}, ${rgba(padColor, 0.72)})`,
+                border: `1px solid ${rgba('#000000', 0.45)}`,
+                color: '#0b0c0f',
+                boxShadow: `0 0 9px ${rgba(padColor, 0.45)}, inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 4px rgba(0,0,0,0.25)`,
+                textShadow: '0 1px 0 rgba(255,255,255,0.25)',
+              } : {
+                fontSize: 10,
+                background: 'linear-gradient(180deg, #24262c, #17181c)',
+                border: `1px solid ${UI.border}`,
+                color: rgba(PAD_PALETTE[i], 0.8),
+                boxShadow: `inset 0 0 6px rgba(0,0,0,0.5), inset 0 -1px 0 ${rgba(PAD_PALETTE[i], 0.35)}`,
               }}
             >
               {mode === 'hotcue' && cue?.label ? cue.label : lbl}
@@ -932,7 +1080,6 @@ function QueuePanel({ deck, color, st, onClose }: { deck: DeckId; color: string;
                 onDragEnd={() => { dragIdx.current = null; setOverIdx(null) }}
                 style={{
                   background: current ? rgba(color, 0.16) : 'transparent',
-                  borderLeft: `2px solid ${current ? color : 'transparent'}`,
                   borderTop: isOver ? `2px solid ${color}` : '2px solid transparent',
                 }}>
                 <GripVertical className="w-3.5 h-3.5 flex-shrink-0 cursor-grab" style={{ color: UI.dim }} />
@@ -1475,15 +1622,13 @@ function DJDeck({ deck, color, compact = false }: { deck: DeckId; color: string;
           <span style={{ color: UI.muted, fontSize: 9, letterSpacing: 1 }}>TEMPO</span>
           <div style={{ height: pitchH, display: 'flex', alignItems: 'center', position: 'relative' }}>
             <div className="absolute inset-x-0" style={{ top: '50%', height: 1, background: UI.border, margin: '0 -4px' }} />
-            <RangeSlider
-              orientation="vertical"
+            <VertFader
               min={-st.tempoRange} max={st.tempoRange} step={0.05}
+              center
               value={st.pitch}
-              onChange={v => setPitch(deck, v)}
-              accent={color}
-              trackColor="rgba(255,255,255,0.15)"
-              style={{ height: pitchH } as React.CSSProperties}
-              aria-label="Tempo"
+              onChange={(v: number) => setPitch(deck, v)}
+              color={color}
+              height={pitchH}
             />
           </div>
           <button
@@ -1651,15 +1796,15 @@ function DeckChannelStrip({ deck, color }: { deck: DeckId; color: string }) {
   const XF: { id: XfAssign; lbl: string }[] = [{ id: 'A', lbl: 'A' }, { id: 'thru', lbl: 'TH' }, { id: 'B', lbl: 'B' }]
   return (
     <div className="flex items-center gap-2 rounded px-2 py-1" style={{ background: rgba('#000000', 0.28), border: `1px solid ${UI.border}` }}>
-      <Knob value={st.gain}   min={0}   max={2} onChange={v => setGain(deck, v)}          label="TRIM" color={color} size={26} />
-      <Knob value={st.eqHigh} min={-12} max={6} onChange={v => setEq(deck, 'high', v)}     label="HI"   color={color} size={26} unit="dB" />
-      <Knob value={st.eqMid}  min={-12} max={6} onChange={v => setEq(deck, 'mid',  v)}     label="MID"  color={color} size={26} unit="dB" />
-      <Knob value={st.eqLow}  min={-12} max={6} onChange={v => setEq(deck, 'low',  v)}     label="LOW"  color={color} size={26} unit="dB" />
-      <Knob value={st.color}  min={-1}  max={1} onChange={v => setColor(deck, v)}          label="COL"  color={color} size={26} />
+      <Knob value={st.gain}   min={0}   max={2} onChange={(v: number) => setGain(deck, v)}          label="TRIM" color={color} size={26} />
+      <Knob value={st.eqHigh} min={-12} max={6} onChange={(v: number) => setEq(deck, 'high', v)}     label="HI"   color={color} size={26} unit="dB" />
+      <Knob value={st.eqMid}  min={-12} max={6} onChange={(v: number) => setEq(deck, 'mid',  v)}     label="MID"  color={color} size={26} unit="dB" />
+      <Knob value={st.eqLow}  min={-12} max={6} onChange={(v: number) => setEq(deck, 'low',  v)}     label="LOW"  color={color} size={26} unit="dB" />
+      <Knob value={st.color}  min={-1}  max={1} onChange={(v: number) => setColor(deck, v)}          label="COL"  color={color} size={26} />
       <div className="flex-1 flex flex-col gap-0.5 min-w-0">
         <span style={{ fontSize: 7.5, letterSpacing: 0.5, color: UI.muted }}>VOL</span>
         <RangeSlider min={0} max={1} step={0.01} value={st.volume}
-               onChange={v => setVolume(deck, v)}
+               onChange={(v: number) => setVolume(deck, v)}
                accent={color} trackColor="rgba(255,255,255,0.15)"
                style={{ width: '100%' }} aria-label="Volume" />
       </div>
@@ -1777,7 +1922,7 @@ function DJDeckCompact({ deck, color }: { deck: DeckId; color: string }) {
         <div className="flex-1" />
         <span style={{ fontSize: 8, letterSpacing: 0.5, color: UI.muted }}>TEMPO</span>
         <button onMouseDown={() => nudge(deck, -1)} onMouseUp={() => nudgeEnd(deck)} onMouseLeave={() => nudgeEnd(deck)} style={mini(false)} title="Ralentir (maintenir)">−</button>
-        <RangeSlider min={-st.tempoRange} max={st.tempoRange} step={0.05} value={st.pitch} onChange={v => setPitch(deck, v)} accent={color} trackColor="rgba(255,255,255,0.15)" style={{ width: 96 }} aria-label="Pitch" />
+        <RangeSlider min={-st.tempoRange} max={st.tempoRange} step={0.05} value={st.pitch} onChange={(v: number) => setPitch(deck, v)} accent={color} trackColor="rgba(255,255,255,0.15)" style={{ width: 96 }} aria-label="Pitch" />
         <button onMouseDown={() => nudge(deck, 1)} onMouseUp={() => nudgeEnd(deck)} onMouseLeave={() => nudgeEnd(deck)} style={mini(false)} title="Accélérer (maintenir)">+</button>
         <span style={{ fontFamily: 'monospace', fontSize: 9, color, width: 46, textAlign: 'right' }}>{st.pitch > 0 ? '+' : ''}{st.pitch.toFixed(1)}%</span>
       </div>
@@ -1876,7 +2021,7 @@ function GraphicEqPanel({ onClose }: { onClose: () => void }) {
     fontSize: 10, fontWeight: 700, letterSpacing: 0.5, padding: '4px 10px', borderRadius: 999,
     background: active ? ACCENT : UI.card,
     border: `1px solid ${active ? ACCENT : UI.border}`,
-    color: active ? '#0e0a1a' : UI.soft,
+    color: active ? '#0b0c0f' : UI.soft,
   } as React.CSSProperties)
 
   return (
@@ -1886,7 +2031,7 @@ function GraphicEqPanel({ onClose }: { onClose: () => void }) {
         className="rounded-2xl p-4 flex flex-col gap-3"
         style={{
           width: 380, maxHeight: '94%', overflow: 'hidden',
-          background: 'linear-gradient(180deg, #232a4f 0%, #181c31 100%)',
+          background: 'linear-gradient(180deg, #24262c 0%, #17181c 100%)',
           border: `1px solid ${rgba(ACCENT, 0.3)}`, boxShadow: '0 24px 70px rgba(0,0,0,0.6)',
         }}
       >
@@ -1902,10 +2047,10 @@ function GraphicEqPanel({ onClose }: { onClose: () => void }) {
 
         {/* Tone sliders */}
         <div className="flex flex-col gap-1.5">
-          <EqSlider label="SURROUND"  value={eq.surround} min={-12} max={12} onChange={v => updateEq({ surround: v })} />
-          <EqSlider label="DEEP BASS" value={eq.deepBass} min={-12} max={12} onChange={v => updateEq({ deepBass: v })} />
+          <EqSlider label="SURROUND"  value={eq.surround} min={-12} max={12} onChange={(v: number) => updateEq({ surround: v })} />
+          <EqSlider label="DEEP BASS" value={eq.deepBass} min={-12} max={12} onChange={(v: number) => updateEq({ deepBass: v })} />
           <EqSlider label="BALANCE"   value={eq.balance}  min={-1}  max={1} step={0.05}
-            onChange={v => updateEq({ balance: v })}
+            onChange={(v: number) => updateEq({ balance: v })}
             fmt={v => Math.abs(v) < 0.03 ? '0' : `${v < 0 ? 'G' : 'D'}${Math.round(Math.abs(v) * 100)}`} />
         </div>
 
@@ -1918,7 +2063,7 @@ function GraphicEqPanel({ onClose }: { onClose: () => void }) {
                 background: eq[key] ? ACCENT : UI.card,
                 border: `1px solid ${eq[key] ? ACCENT : UI.border2}`,
               }}>
-                {eq[key] && <span style={{ color: '#0e0a1a', fontSize: 12, fontWeight: 900, lineHeight: '12px' }}>✓</span>}
+                {eq[key] && <span style={{ color: '#0b0c0f', fontSize: 12, fontWeight: 900, lineHeight: '12px' }}>✓</span>}
               </span>
               <span style={{ color: UI.soft, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>{lbl}</span>
             </button>
@@ -1926,7 +2071,7 @@ function GraphicEqPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Pre-amp gain */}
-        <EqSlider label="GAIN" value={eq.gain} min={-12} max={12} onChange={v => updateEq({ gain: v })} />
+        <EqSlider label="GAIN" value={eq.gain} min={-12} max={12} onChange={(v: number) => updateEq({ gain: v })} />
 
         {/* Band sliders + scale */}
         <div className="flex gap-2 pt-1">
@@ -1938,7 +2083,7 @@ function GraphicEqPanel({ onClose }: { onClose: () => void }) {
                   <RangeSlider
                     orientation="vertical"
                     min={-12} max={12} step={1} value={eq.bands[i]}
-                    onChange={v => setBand(i, v)}
+                    onChange={(v: number) => setBand(i, v)}
                     accent={ACCENT}
                     trackColor="rgba(255,255,255,0.15)"
                     style={{ height: 170 } as React.CSSProperties}
@@ -1978,8 +2123,8 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
   return (
     <div className="flex flex-col gap-2 p-3 h-full relative overflow-hidden" style={{
       minWidth: 248,
-      background: 'radial-gradient(130% 55% at 50% 0%, ' + rgba(ACCENT, 0.22) + ' 0%, rgba(18,16,48,0) 60%),'
-                + ' linear-gradient(180deg, #2e2c6a 0%, #232352 60%, #191a40 100%)',
+      background: 'radial-gradient(130% 55% at 50% 0%, ' + rgba(ACCENT, 0.10) + ' 0%, rgba(0,0,0,0) 60%),'
+                + ' linear-gradient(180deg, #232529 0%, #1a1c20 60%, #121316 100%)',
     }}>
       <p className="text-center font-bold tracking-[0.3em]" style={{
         color: ACCENT, fontSize: 10, textShadow: `0 0 12px ${rgba(ACCENT, 0.6)}`,
@@ -2023,17 +2168,17 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col items-center gap-1">
           <span style={{ color: COL_A, fontSize: 9, fontWeight: 700 }}>A</span>
-          <Knob value={deckA.eqHigh} min={-12} max={6} onChange={v => setEq('A', 'high', v)} label="HIGH" color={COL_A} size={34} unit="dB" />
-          <Knob value={deckA.eqMid}  min={-12} max={6} onChange={v => setEq('A', 'mid',  v)} label="MID"  color={COL_A} size={34} unit="dB" />
-          <Knob value={deckA.eqLow}  min={-12} max={6} onChange={v => setEq('A', 'low',  v)} label="LOW"  color={COL_A} size={34} unit="dB" />
-          <Knob value={deckA.color}  min={-1}  max={1} onChange={v => setColor('A', v)}      label="COLOR" color={COL_A} size={34} />
+          <Knob value={deckA.eqHigh} min={-12} max={6} onChange={(v: number) => setEq('A', 'high', v)} label="HIGH" color={COL_A} size={34} unit="dB" />
+          <Knob value={deckA.eqMid}  min={-12} max={6} onChange={(v: number) => setEq('A', 'mid',  v)} label="MID"  color={COL_A} size={34} unit="dB" />
+          <Knob value={deckA.eqLow}  min={-12} max={6} onChange={(v: number) => setEq('A', 'low',  v)} label="LOW"  color={COL_A} size={34} unit="dB" />
+          <Knob value={deckA.color}  min={-1}  max={1} onChange={(v: number) => setColor('A', v)}      label="COLOR" color={COL_A} size={34} />
         </div>
         <div className="flex flex-col items-center gap-1">
           <span style={{ color: COL_B, fontSize: 9, fontWeight: 700 }}>B</span>
-          <Knob value={deckB.eqHigh} min={-12} max={6} onChange={v => setEq('B', 'high', v)} label="HIGH" color={COL_B} size={34} unit="dB" />
-          <Knob value={deckB.eqMid}  min={-12} max={6} onChange={v => setEq('B', 'mid',  v)} label="MID"  color={COL_B} size={34} unit="dB" />
-          <Knob value={deckB.eqLow}  min={-12} max={6} onChange={v => setEq('B', 'low',  v)} label="LOW"  color={COL_B} size={34} unit="dB" />
-          <Knob value={deckB.color}  min={-1}  max={1} onChange={v => setColor('B', v)}      label="COLOR" color={COL_B} size={34} />
+          <Knob value={deckB.eqHigh} min={-12} max={6} onChange={(v: number) => setEq('B', 'high', v)} label="HIGH" color={COL_B} size={34} unit="dB" />
+          <Knob value={deckB.eqMid}  min={-12} max={6} onChange={(v: number) => setEq('B', 'mid',  v)} label="MID"  color={COL_B} size={34} unit="dB" />
+          <Knob value={deckB.eqLow}  min={-12} max={6} onChange={(v: number) => setEq('B', 'low',  v)} label="LOW"  color={COL_B} size={34} unit="dB" />
+          <Knob value={deckB.color}  min={-1}  max={1} onChange={(v: number) => setColor('B', v)}      label="COLOR" color={COL_B} size={34} />
         </div>
       </div>
 
@@ -2058,16 +2203,16 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
       {/* Channel TRIM + faders + VU — same 2-col grid as the EQ so A/B align ───── */}
       <div className="grid grid-cols-2 gap-2 items-stretch flex-1 min-h-0">
         <div className="flex flex-col items-center gap-1.5 min-h-0">
-          <Knob value={deckA.gain} min={0} max={2} onChange={v => setGain('A', v)} label="TRIM" color={COL_A} size={34} />
+          <Knob value={deckA.gain} min={0} max={2} onChange={(v: number) => setGain('A', v)} label="TRIM" color={COL_A} size={34} />
           <div className="flex gap-1.5 items-stretch flex-1 min-h-0">
             <VUMeter analyser={djEngine('A').analyser} color={COL_A} fill />
-            <VertFader value={deckA.volume} onChange={v => setVolume('A', v)} color={COL_A} height="100%" />
+            <VertFader value={deckA.volume} onChange={(v: number) => setVolume('A', v)} color={COL_A} height="100%" />
           </div>
         </div>
         <div className="flex flex-col items-center gap-1.5 min-h-0">
-          <Knob value={deckB.gain} min={0} max={2} onChange={v => setGain('B', v)} label="TRIM" color={COL_B} size={34} />
+          <Knob value={deckB.gain} min={0} max={2} onChange={(v: number) => setGain('B', v)} label="TRIM" color={COL_B} size={34} />
           <div className="flex gap-1.5 items-stretch flex-1 min-h-0">
-            <VertFader value={deckB.volume} onChange={v => setVolume('B', v)} color={COL_B} height="100%" />
+            <VertFader value={deckB.volume} onChange={(v: number) => setVolume('B', v)} color={COL_B} height="100%" />
             <VUMeter analyser={djEngine('B').analyser} color={COL_B} fill />
           </div>
         </div>
@@ -2080,14 +2225,12 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
           <span style={{ color: UI.muted, fontSize: 8, letterSpacing: 2 }}>CROSSFADER</span>
           <span style={{ color: COL_B, fontSize: 9, fontWeight: 700 }}>B</span>
         </div>
-        <RangeSlider
+        <HorizFader
           min={-1} max={1} step={0.01}
           value={crossfader}
           onChange={setCrossfader}
-          accent={ACCENT}
-          trackColor="rgba(255,255,255,0.15)"
-          className="w-full"
-          aria-label="Crossfader"
+          color={ACCENT}
+          label="Crossfader"
         />
         <div className="flex items-center justify-center gap-1 mt-1.5">
           <button
@@ -2138,7 +2281,7 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
               fill:  isRecording ? '#ff2244' : 'transparent',
             }} />
           </span>
-          <span style={{ color: isRecording ? '#ff6688' : UI.muted, fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>
+          <span style={{ color: isRecording ? '#ff4d5e' : UI.muted, fontSize: 9, fontWeight: 700, letterSpacing: 1 }}>
             {isRecording ? 'REC' : 'ENREG.'}
           </span>
         </button>
@@ -2283,7 +2426,7 @@ function DJBrowser({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void
     <div style={{
       position: 'absolute', left: 0, right: 0, bottom: 0,
       height: isOpen ? 248 : 34,
-      background: '#1b2138',
+      background: '#16181d',
       borderTop: `1px solid ${UI.border}`,
       boxShadow: isOpen ? '0 -14px 34px rgba(0,0,0,0.5)' : 'none',
       transition: 'height 0.2s ease',
@@ -2365,7 +2508,7 @@ function DJBrowser({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void
                     className="dj-row-hover flex items-center gap-2 px-3 py-1.5 rounded text-left">
                     <Mic2 className="w-4 h-4 flex-shrink-0" style={{ color: UI.muted }} />
                     <div className="min-w-0">
-                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 500 }}>{a.name}</p>
+                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 600 }}>{a.name}</p>
                       {a.album_count > 0 && <p style={{ color: UI.dim, fontSize: 9 }}>{a.album_count} album{a.album_count > 1 ? 's' : ''}</p>}
                     </div>
                   </button>
@@ -2385,7 +2528,7 @@ function DJBrowser({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void
                     className="dj-row-hover flex items-center gap-2 px-3 py-1.5 rounded text-left">
                     <Disc3 className="w-4 h-4 flex-shrink-0" style={{ color: UI.muted }} />
                     <div className="min-w-0">
-                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 500 }}>{a.title}</p>
+                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 600 }}>{a.title}</p>
                       <p style={{ color: UI.dim, fontSize: 9 }}>{a.track_count} titres{a.release_year ? ` · ${a.release_year}` : ''}</p>
                     </div>
                   </button>
@@ -2403,7 +2546,7 @@ function DJBrowser({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void
                     className="dj-row-hover flex items-center gap-2 px-3 py-1.5 rounded text-left">
                     <Disc3 className="w-4 h-4 flex-shrink-0" style={{ color: UI.muted }} />
                     <div className="min-w-0">
-                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 500 }}>{a.title}</p>
+                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 600 }}>{a.title}</p>
                       <p style={{ color: UI.dim, fontSize: 9 }}>{a.track_count} titres</p>
                     </div>
                   </button>
@@ -2421,7 +2564,7 @@ function DJBrowser({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void
                     className="dj-row-hover w-full flex items-center gap-3 px-4 py-2 text-left">
                     <ListMusic className="w-4 h-4 flex-shrink-0" style={{ color: UI.muted }} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 500 }}>{p.name}</p>
+                      <p className="truncate" style={{ color: UI.soft, fontSize: 10, fontWeight: 600 }}>{p.name}</p>
                       <p style={{ color: UI.dim, fontSize: 9 }}>{p.track_count} titres · {formatDuration(p.duration_secs)}</p>
                     </div>
                   </button>
@@ -2432,7 +2575,7 @@ function DJBrowser({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void
 
           {!isLoading && showTrackList && (
             <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 10 }}>
-              <thead style={{ position: 'sticky', top: 0, background: '#1b2138', zIndex: 1 }}>
+              <thead style={{ position: 'sticky', top: 0, background: '#16181d', zIndex: 1 }}>
                 <tr style={{ borderBottom: `1px solid ${UI.border}`, color: UI.muted }}>
                   <th className="px-4 py-1 text-left font-medium">
                     Titre
@@ -2557,7 +2700,7 @@ function HeadphoneControls() {
           options={devices.map(d => ({ id: d.deviceId, label: d.label || `Sortie ${d.deviceId.slice(0, 6)}` }))}
         />
       ) : <span style={{ color: UI.dim, fontSize: 8 }}>sortie n/d</span>}
-      <RangeSlider min={0} max={1} step={0.01} value={cueMix} onChange={setCueMix} accent="#34d399" trackColor="rgba(255,255,255,0.15)" style={{ width: 56 }} aria-label="CUE / MIX" />
+      <HorizFader min={0} max={1} step={0.01} value={cueMix} onChange={setCueMix} color="#34d399" width={56} height={18} label="CUE / MIX" />
     </div>
   )
 }
@@ -2594,7 +2737,7 @@ function BeatFxBar() {
           fontSize: 10, fontWeight: 800, letterSpacing: 1, padding: '5px 14px',
           background: on ? ACCENT : UI.card,
           border: `1px solid ${on ? ACCENT : UI.border2}`,
-          color: on ? '#0e0a1a' : UI.soft,
+          color: on ? '#0b0c0f' : UI.soft,
           boxShadow: on ? `0 0 16px ${rgba(ACCENT, 0.5)}` : 'none',
         }}
       >
@@ -2622,12 +2765,11 @@ function BeatFxBar() {
 
       {/* Depth */}
       <span style={{ color: UI.muted, fontSize: 8, letterSpacing: 1 }}>DEPTH</span>
-      <RangeSlider
+      <HorizFader
         min={0} max={1} step={0.01} value={beatFx.depth}
-        onChange={v => setBeatFx({ depth: v })}
-        accent={ACCENT} trackColor="rgba(255,255,255,0.15)"
-        style={{ width: 120 }}
-        aria-label="Beat FX depth"
+        onChange={(v: number) => setBeatFx({ depth: v })}
+        color={ACCENT} width={120} height={20}
+        label="Beat FX depth"
       />
       <span style={{ color: ACCENT, fontSize: 10, fontFamily: 'monospace', width: 30 }}>{Math.round(beatFx.depth * 100)}%</span>
 
@@ -2662,7 +2804,7 @@ function BeatFxBar() {
         <button onClick={() => setTalkover(!talkover)} style={chip(talkover, '#ff7a3d')} title="Talkover (baisse la musique quand le micro est actif)">TALK</button>
         <button onClick={() => setSamplerOpen(o => !o)} style={chip(samplerOpen, '#34d399')} title="Sampler">SMP</button>
         {samplerOpen && (
-          <div className="absolute" style={{ bottom: 'calc(100% + 8px)', right: 0, background: '#1b2138', border: `1px solid ${UI.border2}`, borderRadius: 8, padding: 8, boxShadow: '0 -10px 30px rgba(0,0,0,0.5)', zIndex: 30 }}>
+          <div className="absolute" style={{ bottom: 'calc(100% + 8px)', right: 0, background: '#16181d', border: `1px solid ${UI.border2}`, borderRadius: 8, padding: 8, boxShadow: '0 -10px 30px rgba(0,0,0,0.5)', zIndex: 30 }}>
             <div className="grid grid-cols-4 gap-1" style={{ width: 300 }}>
               {SAMPLE_NAMES.map((n, i) => {
                 const recording = sampleRecording === i
@@ -2675,7 +2817,7 @@ function BeatFxBar() {
                       fontSize: 8,
                       background: recording ? rgba('#ff2244', 0.25) : rgba('#34d399', 0.14),
                       border: `1px solid ${recording ? '#ff2244' : rgba('#34d399', 0.5)}`,
-                      color: recording ? '#ff8095' : '#9af3d3',
+                      color: recording ? '#ff5c5c' : '#9af3d3',
                       animation: recording ? 'djRecPulse 1s ease-in-out infinite' : 'none',
                     }}>
                     {recording ? '● REC' : n}
@@ -2716,12 +2858,12 @@ function MidiPanel({ onClose }: { onClose: () => void }) {
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center" style={{ background: rgba('#05060c', 0.62) }} onMouseDown={onClose}>
       <div onMouseDown={e => e.stopPropagation()} className="rounded-2xl p-4 flex flex-col gap-3"
-        style={{ width: 420, maxHeight: '92%', background: 'linear-gradient(180deg, #232a4f 0%, #181c31 100%)', border: `1px solid ${rgba(ACCENT, 0.3)}`, boxShadow: '0 24px 70px rgba(0,0,0,0.6)' }}>
+        style={{ width: 420, maxHeight: '92%', background: 'linear-gradient(180deg, #24262c 0%, #17181c 100%)', border: `1px solid ${rgba(ACCENT, 0.3)}`, boxShadow: '0 24px 70px rgba(0,0,0,0.6)' }}>
         <div className="flex items-center gap-2">
           <span style={{ color: UI.text, fontSize: 16, fontWeight: 800 }}>Contrôleur MIDI</span>
           <div className="flex-1" />
           <button onClick={toggleMidi} disabled={!midiSupported}
-            style={{ fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 6, background: midiEnabled ? '#34d399' : UI.card, border: `1px solid ${midiEnabled ? '#34d399' : UI.border2}`, color: midiEnabled ? '#0e0a1a' : UI.soft }}>
+            style={{ fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 6, background: midiEnabled ? '#34d399' : UI.card, border: `1px solid ${midiEnabled ? '#34d399' : UI.border2}`, color: midiEnabled ? '#0b0c0f' : UI.soft }}>
             {midiEnabled ? 'ACTIVÉ' : 'ACTIVER'}
           </button>
           <button onClick={onClose} style={{ color: UI.muted }}><X className="w-4 h-4" /></button>
@@ -2813,8 +2955,8 @@ export default function DJPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden select-none" style={{
       color: UI.soft,
-      background: 'radial-gradient(150% 100% at 50% -10%, rgba(125,85,235,0.22) 0%, rgba(0,0,0,0) 55%),'
-                + ' linear-gradient(180deg, #232352 0%, #15162f 100%)',
+      background: 'radial-gradient(150% 100% at 50% -10%, rgba(255,176,46,0.06) 0%, rgba(0,0,0,0) 55%),'
+                + ' linear-gradient(180deg, #1b1d21 0%, #0e0f12 100%)',
     }}>
       <style>{DJ_CSS}</style>
 
@@ -2823,9 +2965,9 @@ export default function DJPage() {
         className="flex items-center gap-4 px-4 flex-shrink-0 overflow-x-auto lg:overflow-visible"
         style={{
           height: 44,
-          background: 'linear-gradient(180deg, #2e2c6c 0%, #1e1e48 100%)',
-          borderBottom: `1px solid ${rgba(ACCENT, 0.3)}`,
-          boxShadow: `0 1px 18px ${rgba(ACCENT, 0.15)}`,
+          background: 'linear-gradient(180deg, #26282d 0%, #17181c 100%)',
+          borderBottom: `1px solid ${rgba(ACCENT, 0.28)}`,
+          boxShadow: `0 1px 16px rgba(0,0,0,0.5)`,
         }}
       >
         <button
@@ -2851,7 +2993,7 @@ export default function DJPage() {
           {/* Master level meter + clip */}
           <MasterMeter />
 
-          {/* Deck count 2 / 4 / 6 — desktop only (mobile force la pile à 2). */}
+          {/* Deck count 2 / 4 / 6 — desktop only (mobile forces the stack to 2). */}
           <div className="hidden lg:flex rounded overflow-hidden" style={{ border: `1px solid ${UI.border}` }} title="Nombre de platines">
             {DECK_COUNTS.map(n => {
               const active = deckCount === n
@@ -2859,7 +3001,7 @@ export default function DJPage() {
                 <button key={n} onClick={() => setDeckCount(n)}
                   className="active:scale-95"
                   style={{ padding: '4px 8px', fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                           background: active ? rgba(ACCENT, 0.25) : UI.card, color: active ? '#d7c4ff' : UI.muted,
+                           background: active ? rgba(ACCENT, 0.25) : UI.card, color: active ? '#ffd9a0' : UI.muted,
                            borderLeft: n !== DECK_COUNTS[0] ? `1px solid ${UI.border}` : 'none' }}
                   title={`${n} platines`}>{n}</button>
               )
@@ -2902,7 +3044,7 @@ export default function DJPage() {
           <button
             onClick={panic}
             className="rounded font-bold active:scale-95"
-            style={{ fontSize: 9, letterSpacing: 1, padding: '4px 10px', background: rgba('#ff2244', 0.16), border: '1px solid rgba(255,34,68,0.6)', color: '#ff6b80' }}
+            style={{ fontSize: 9, letterSpacing: 1, padding: '4px 10px', background: rgba('#ff2244', 0.16), border: '1px solid rgba(255,34,68,0.6)', color: '#ff7676' }}
             title="Tout arrêter (decks, FX, micro)"
           >
             PANIC
@@ -2936,12 +3078,12 @@ export default function DJPage() {
         const left:  DeckId[] = (['A', 'C', 'E'] as DeckId[]).slice(0, deckCount / 2)
         const right: DeckId[] = (['B', 'D', 'F'] as DeckId[]).slice(0, deckCount / 2)
 
-        // ── Mobile : pile verticale scrollable (platine A · mixer · platine B …).
-        // On réutilise les mêmes sous-composants, à pleine largeur et avec une
-        // hauteur explicite (ils sont en `h-full` + flex interne, donc s'adaptent).
+        // ── Mobile: scrollable vertical stack (deck A · mixer · deck B …).
+        // The same subcomponents are reused, at full width and with an explicit
+        // height (they are `h-full` + inner flex, so they adapt).
         if (isMobile) {
           const deckH = compact ? 250 : 380
-          // Mixer inséré après la moitié gauche pour rester « central ».
+          // Mixer inserted after the left half so it stays central.
           return (
             <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" style={{ gap: 1, background: UI.border }}>
               {left.map(d => (
@@ -2963,7 +3105,7 @@ export default function DJPage() {
           )
         }
 
-        // ── Desktop : disposition pro inchangée (colonnes autour du mixer).
+        // ── Desktop: unchanged pro layout (columns around the mixer).
         const Column = ({ decks }: { decks: DeckId[] }) => (
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden" style={{ gap: 1, background: UI.border }}>
             {decks.map(d => (
@@ -3007,7 +3149,7 @@ export default function DJPage() {
               onChange={e => { cfgNameRef.current = e.target.value }}
               onKeyDown={e => { if (e.key === 'Enter' && cfgNameRef.current.trim()) { saveConfig(cfgNameRef.current.trim()); cfgNameRef.current = ''; close() } }}
               className="w-full rounded outline-none"
-              style={{ background: '#1b2138', color: '#e6e6f0', border: '1px solid #454545', fontSize: 12, padding: '3px 6px', margin: '2px 0' }} />
+              style={{ background: '#16181d', color: '#e6e6f0', border: '1px solid #454545', fontSize: 12, padding: '3px 6px', margin: '2px 0' }} />
           ) },
           { type: 'separator' },
           { type: 'label', text: configNames.length ? 'Charger une config' : 'Aucune config enregistrée' },

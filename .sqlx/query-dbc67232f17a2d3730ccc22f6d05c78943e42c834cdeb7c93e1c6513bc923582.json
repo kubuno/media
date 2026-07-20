@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, tvmaze_id FROM media.tv_shows\n           WHERE NOT meta_locked\n             AND (meta_status = 'pending_meta'\n                  OR (meta_status = 'error_meta' AND meta_retries < 3\n                      AND updated_at < NOW() - INTERVAL '1 hour'))\n           ORDER BY created_at DESC\n           LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "tvmaze_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "dbc67232f17a2d3730ccc22f6d05c78943e42c834cdeb7c93e1c6513bc923582"
+}

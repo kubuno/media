@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.albums\n           SET title        = $2,\n               release_year = COALESCE($3, release_year),\n               release_date = COALESCE($4, release_date),\n               album_type   = COALESCE($5, album_type),\n               genres       = CASE WHEN cardinality($6::text[]) > 0 THEN $6 ELSE genres END,\n               -- Local artwork (module-served path) always beats remote covers.\n               cover_path   = CASE WHEN cover_path LIKE '/api/%' THEN cover_path\n                                   ELSE COALESCE($7, cover_path) END,\n               meta_status  = 'ready',\n               meta_retries = 0,\n               updated_at   = NOW()\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Int4",
+        "Date",
+        "Varchar",
+        "TextArray",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a2e3179c3468a9c113e4aae7f26123ae46b1932fb16b6c8efde39eb377eefe13"
+}

@@ -1,8 +1,9 @@
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Film, Clapperboard, ListMusic,
   Clock, Heart, PlayCircle, Disc3, Mic2, Radio,
+  Home, Bookmark, Tv,
 } from 'lucide-react'
 import { SidebarNavItem } from '@kubuno/sdk'
 
@@ -18,9 +19,12 @@ function SectionLabel({ label, collapsed }: { label: string; collapsed?: boolean
 }
 
 const WATCH_ITEMS = [
-  { labelKey: 'media_nav_movies',       icon: <Film className="w-4 h-4 flex-shrink-0" />,        path: '/media/watch' },
+  { labelKey: 'media_nav_home',         icon: <Home className="w-4 h-4 flex-shrink-0" />,         path: '/media/watch' },
+  { labelKey: 'media_nav_movies',       icon: <Film className="w-4 h-4 flex-shrink-0" />,        path: '/media/watch/movies' },
   { labelKey: 'media_nav_shows',        icon: <Clapperboard className="w-4 h-4 flex-shrink-0" />, path: '/media/watch/shows' },
   { labelKey: 'media_nav_continue',     icon: <Clock className="w-4 h-4 flex-shrink-0" />,        path: '/media/watch/continue' },
+  { labelKey: 'media_nav_watchlist',    icon: <Bookmark className="w-4 h-4 flex-shrink-0" />,     path: '/media/watch/watchlist' },
+  { labelKey: 'media_nav_tv',           icon: <Tv className="w-4 h-4 flex-shrink-0" />,           path: '/media/watch/tv' },
 ]
 
 const LISTEN_ITEMS = [
@@ -33,7 +37,6 @@ const LISTEN_ITEMS = [
 ]
 
 export default function MediaSidebarBody({ collapsed = false }: { collapsed?: boolean }) {
-  const navigate     = useNavigate()
   const { pathname } = useLocation()
   const { t }        = useTranslation('media')
 
@@ -47,13 +50,13 @@ export default function MediaSidebarBody({ collapsed = false }: { collapsed?: bo
       <SectionLabel collapsed={collapsed} label={t('media_section_video')} />
       {WATCH_ITEMS.map(({ labelKey, icon, path }) => (
         <SidebarNavItem collapsed={collapsed} key={path} label={t(labelKey)} icon={icon}
-          active={isActive(path)} onClick={() => navigate(path)} />
+          active={isActive(path)} to={path} />
       ))}
 
       <SectionLabel collapsed={collapsed} label={t('media_section_music')} />
       {LISTEN_ITEMS.map(({ labelKey, icon, path }) => (
         <SidebarNavItem collapsed={collapsed} key={path} label={t(labelKey)} icon={icon}
-          active={isActive(path)} onClick={() => navigate(path)} />
+          active={isActive(path)} to={path} />
       ))}
     </nav>
   )

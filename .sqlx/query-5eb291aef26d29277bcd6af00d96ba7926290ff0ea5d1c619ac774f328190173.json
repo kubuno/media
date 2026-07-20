@@ -1,0 +1,85 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, stream_url, homepage, logo, categories, country, language,\n                  is_builtin, owner_id, click_count\n           FROM media.tv_channels\n           WHERE (is_builtin OR owner_id = $1)\n             AND ($2::text  IS NULL OR name ILIKE '%' || $2 || '%')\n             AND ($3::text  IS NULL OR $3 = ANY(categories))\n             AND (NOT $4::bool OR owner_id = $1)\n           ORDER BY is_builtin DESC, name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "stream_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "homepage",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "logo",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "categories",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 6,
+        "name": "country",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "language",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "is_builtin",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "owner_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "click_count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "5eb291aef26d29277bcd6af00d96ba7926290ff0ea5d1c619ac774f328190173"
+}

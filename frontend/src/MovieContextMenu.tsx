@@ -11,6 +11,7 @@ import { MenuDropdown, type MenuItem } from '@ui'
 import { mediaApi, type Movie } from './api'
 import { useMediaQueueStore } from './store/mediaQueueStore'
 import { useTrailerStore } from './store/trailerStore'
+import { useIdentifyStore } from './store/identifyStore'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ export default function MovieContextMenu({ movie, position, onClose }: Props) {
   const addToQueue    = useMediaQueueStore(s => s.addToQueue)
   const playNextUp    = useMediaQueueStore(s => s.playNextUp)
   const openTrailer   = useTrailerStore(s => s.openTrailer)
+  const openIdentify  = useIdentifyStore(s => s.open)
 
   const [inWatchlist, setInWatchlist] = useState<boolean | null>(null)
   const [isWatched,   setIsWatched]   = useState<boolean | null>(null)
@@ -130,7 +132,10 @@ export default function MovieContextMenu({ movie, position, onClose }: Props) {
     { type: 'action', icon: <CheckSquare className="w-4 h-4" />, label: isWatched ? t('media_menu_mark_unwatched') : t('media_menu_mark_watched'), onClick: handleMarkWatched },
     { type: 'action', icon: <RefreshCw className="w-4 h-4" />, label: t('media_menu_refresh_meta'), onClick: handleRefreshMeta },
     { type: 'action', icon: <ScanLine  className="w-4 h-4" />, label: t('media_menu_analyze'),      onClick: () => showToast(t('media_toast_analyze_started')) },
-    { type: 'action', icon: <Target    className="w-4 h-4" />, label: t('media_menu_fix_match'),    onClick: () => showToast(t('media_toast_coming_soon')) },
+    { type: 'action', icon: <Target    className="w-4 h-4" />, label: t('media_menu_fix_match'),    onClick: () => openIdentify({
+      kind: 'movie', id: movie.id, name: movie.title,
+      year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
+    }) },
     { type: 'action', icon: <Unlink    className="w-4 h-4" />, label: t('media_menu_dissociate'),   onClick: handleDissociate },
     { type: 'action', icon: <Zap       className="w-4 h-4" />, label: t('media_menu_optimize'),     onClick: () => showToast(t('media_toast_coming_soon')) },
     { type: 'action', icon: <Download  className="w-4 h-4" />, label: t('media_menu_save_file'),    onClick: () => { window.open(mediaApi.streamUrl(movie.id)) } },

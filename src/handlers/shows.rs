@@ -19,16 +19,23 @@ pub async fn list_shows(
 ) -> Result<Json<Value>, MediaError> {
     let limit  = q.limit.unwrap_or(50).min(200);
     let offset = (q.page.unwrap_or(1) - 1) * limit;
+    let search = q.q.or(q.search).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let recent = q.sort.as_deref() == Some("recent");
 
+    // Single query; `recent` collapses the name key so created_at wins.
     let rows = sqlx::query!(
         r#"SELECT id, name, original_name, first_air_date,
                   vote_average::FLOAT8, poster_path, backdrop_path,
                   season_count, episode_count, meta_status
            FROM media.tv_shows
-           ORDER BY name
+           WHERE $3::text IS NULL OR name ILIKE '%' || $3 || '%'
+           ORDER BY (CASE WHEN $4::bool THEN NULL ELSE name END) ASC NULLS FIRST,
+                    created_at DESC
            LIMIT $1 OFFSET $2"#,
         limit,
         offset,
+        search,
+        recent,
     )
     .fetch_all(&state.db)
     .await?;
@@ -58,7 +65,8 @@ pub async fn get_show(
         r#"SELECT id, library_id, name, original_name, overview, tagline,
                   first_air_date, last_air_date, status, poster_path, backdrop_path,
                   vote_average::FLOAT8, vote_count, genres, networks, season_count, episode_count,
-                  original_language, cast_json, crew_json, meta_status, created_at, updated_at
+                  original_language, cast_json, crew_json, meta_status, meta_locked,
+                  ratings_json, created_at, updated_at
            FROM media.tv_shows WHERE id = $1"#,
         id
     )
@@ -77,15 +85,24 @@ pub async fn get_show(
     Ok(Json(json!({
         "id":               show.id,
         "name":             show.name,
+        "original_name":    show.original_name,
         "overview":         show.overview,
+        "tagline":          show.tagline,
         "poster_path":      show.poster_path,
         "backdrop_path":    show.backdrop_path,
         "vote_average":     show.vote_average,
+        "vote_count":       show.vote_count,
         "genres":           show.genres,
+        "networks":         show.networks,
         "status":           show.status,
         "first_air_date":   show.first_air_date,
+        "last_air_date":    show.last_air_date,
+        "original_language": show.original_language,
         "season_count":     show.season_count,
         "episode_count":    show.episode_count,
+        "meta_status":      show.meta_status,
+        "meta_locked":      show.meta_locked,
+        "ratings":          show.ratings_json,
         "cast":             show.cast_json,
         "seasons":          seasons.iter().map(|s| json!({
             "id":             s.id,

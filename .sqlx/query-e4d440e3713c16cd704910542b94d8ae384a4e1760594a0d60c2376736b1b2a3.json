@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media.tv_shows SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e4d440e3713c16cd704910542b94d8ae384a4e1760594a0d60c2376736b1b2a3"
+}

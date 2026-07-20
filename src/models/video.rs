@@ -123,4 +123,6 @@ pub struct ListShowsQuery {
     pub sort:   Option<String>,
     pub genre:  Option<String>,
     pub search: Option<String>,
+    /// Alias for `search` (the frontend sends `q`).
+    pub q:      Option<String>,
 }

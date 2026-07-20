@@ -1,0 +1,238 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, library_id, file_path, file_size, duration_secs,\n                  video_codec, audio_codec, resolution_w, resolution_h,\n                  tmdb_id, imdb_id, title, original_title, overview, tagline,\n                  release_date, runtime_mins, poster_path, backdrop_path,\n                  vote_average::FLOAT8, vote_count, popularity::FLOAT8, genres,\n                  original_language, production_countries, meta_status,\n                  cast_json, crew_json, subtitles, transcode_status,\n                  content_rating, trailer_key, poster_urls, meta_locked, ratings_json,\n                  created_at, updated_at\n           FROM media.movies WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "library_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "file_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "file_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "duration_secs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "video_codec",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "audio_codec",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "resolution_w",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "resolution_h",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "tmdb_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "imdb_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 12,
+        "name": "original_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 13,
+        "name": "overview",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "tagline",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 15,
+        "name": "release_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 16,
+        "name": "runtime_mins",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 17,
+        "name": "poster_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 18,
+        "name": "backdrop_path",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 19,
+        "name": "vote_average",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 20,
+        "name": "vote_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 21,
+        "name": "popularity",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 22,
+        "name": "genres",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 23,
+        "name": "original_language",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 24,
+        "name": "production_countries",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 25,
+        "name": "meta_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 26,
+        "name": "cast_json",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 27,
+        "name": "crew_json",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 28,
+        "name": "subtitles",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 29,
+        "name": "transcode_status",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 30,
+        "name": "content_rating",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 31,
+        "name": "trailer_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 32,
+        "name": "poster_urls",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 33,
+        "name": "meta_locked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 34,
+        "name": "ratings_json",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 35,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 36,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      null,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "93064edf64ce5705913dea0dafd1d010b708c93f05ed38287df134dc572f20e4"
+}

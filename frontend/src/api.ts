@@ -70,6 +70,11 @@ export interface Movie {
   trailer_key:       string | null
   poster_urls:       string[]
   file_path:         string | null
+  tmdb_id?:          number | null
+  imdb_id?:          string | null
+  meta_locked?:      boolean
+  /** Multi-source ratings via OMDb (Rotten Tomatoes, IMDb, Metacritic). */
+  ratings?:          { imdb?: string; rotten_tomatoes?: string; metacritic?: string }
 }
 
 export interface TvShow {
@@ -119,6 +124,61 @@ export interface Album {
   duration_secs: number
   artist_id: string | null
   label: string | null
+  /** Present on the album detail endpoint. */
+  album_type?: string | null
+  artist_name?: string | null
+  mbid?: string | null
+  meta_status?: string
+  meta_locked?: boolean
+}
+
+// ── Identify candidates (manual metadata match) ──────────────────────────────
+
+export interface MovieCandidate {
+  /** null for non-TMDB sources (Wikipedia). */
+  tmdb_id:        number | null
+  media_type?:    string
+  /** Which provider surfaced the candidate ("tmdb" | "wikipedia"). */
+  source?:        string
+  title:          string
+  original_title: string | null
+  year:           number | null
+  overview:       string | null
+  poster_url:     string | null
+  backdrop_url:   string | null
+  vote_average:   number | null
+  vote_count:     number | null
+}
+
+export interface ShowCandidate {
+  tvmaze_id:  number
+  name:       string
+  year:       number | null
+  status:     string | null
+  network:    string | null
+  genres:     string[]
+  overview:   string | null
+  poster_url: string | null
+  score:      number
+}
+
+export interface ArtistCandidate {
+  mbid:           string
+  name:           string
+  disambiguation: string | null
+  type:           string | null
+  country:        string | null
+  begin:          string | null
+  score:          number | null
+}
+
+export interface AlbumCandidate {
+  mbid:   string
+  title:  string
+  artist: string | null
+  year:   number | null
+  type:   string | null
+  score:  number | null
 }
 
 export interface Track {
@@ -175,6 +235,30 @@ export interface RadioDiscoverResult {
   tags:       string[]
 }
 
+export interface TvChannel {
+  id:          string
+  name:        string
+  stream_url:  string   // /api/v1/media/tv/channels/:id/stream (HLS proxy)
+  homepage:    string | null
+  logo:        string | null
+  categories:  string[]
+  country:     string | null
+  language:    string | null
+  is_builtin:  boolean
+  is_custom:   boolean
+  is_favorite: boolean
+  click_count: number
+}
+
+export interface TvDiscoverResult {
+  name:       string
+  stream_url: string
+  logo:       string | null
+  homepage:   string | null
+  country:    string | null
+  categories: string[]
+}
+
 export interface VideoProgress {
   position_secs: number
   duration_secs: number
@@ -189,12 +273,14 @@ const TMDB_IMG = 'https://image.tmdb.org/t/p'
 export function posterUrl(path: string | null, size: 'w185' | 'w342' | 'w500' = 'w342'): string | null {
   if (!path) return null
   if (path.startsWith('http')) return path
+  if (path.startsWith('/api/')) return path // module-served image (local covers)
   return `${TMDB_IMG}/${size}${path}`
 }
 
 export function backdropUrl(path: string | null): string | null {
   if (!path) return null
   if (path.startsWith('http')) return path
+  if (path.startsWith('/api/')) return path
   return `${TMDB_IMG}/w780${path}`
 }
 
@@ -287,7 +373,7 @@ export const mediaApi = {
   },
 
   // Shows
-  async getShows(params?: { limit?: number; offset?: number; q?: string }): Promise<TvShow[]> {
+  async getShows(params?: { limit?: number; offset?: number; q?: string; sort?: 'recent' }): Promise<TvShow[]> {
     const { data } = await api.get('/media/shows', { params })
     return data.shows ?? []
   },
@@ -308,6 +394,8 @@ export const mediaApi = {
   async getArtist(id: string): Promise<{
     id: string; name: string; biography: string | null; image_path: string | null
     genres: string[] | null; country: string | null; artist_type: string | null; album_count: number
+    mbid: string | null; begin_date: string | null; end_date: string | null; meta_status: string
+    meta_locked?: boolean
     albums: Array<{ id: string; title: string; release_year: number | null; cover_path: string | null; album_type: string | null; track_count: number }>
     top_tracks: Array<{ id: string; title: string; duration_secs: number; play_count: number; album_id: string | null }>
   }> {
@@ -450,6 +538,48 @@ export const mediaApi = {
     await api.post(`/media/movies/${id}/set-poster`, { poster_url: posterUrl })
   },
 
+  // ── Identify (manual metadata match) ────────────────────────────────────────
+  async identifyMovie(id: string, query?: string, year?: number | null): Promise<{ query: string; candidates: MovieCandidate[] }> {
+    const { data } = await api.get(`/media/movies/${id}/identify`, { params: { query: query || undefined, year: year ?? undefined } })
+    return data
+  },
+  async applyMovieMatch(id: string, candidate: MovieCandidate): Promise<void> {
+    await api.post(`/media/movies/${id}/identify`, candidate)
+  },
+  async identifyShow(id: string, query?: string): Promise<{ query: string; candidates: ShowCandidate[] }> {
+    const { data } = await api.get(`/media/shows/${id}/identify`, { params: { query: query || undefined } })
+    return data
+  },
+  async applyShowMatch(id: string, tvmazeId: number): Promise<void> {
+    await api.post(`/media/shows/${id}/identify`, { tvmaze_id: tvmazeId })
+  },
+  async refreshShowMeta(id: string): Promise<void> {
+    await api.post(`/media/shows/${id}/refresh-meta`)
+  },
+  async identifyArtist(id: string, query?: string): Promise<{ query: string; candidates: ArtistCandidate[] }> {
+    const { data } = await api.get(`/media/artists/${id}/identify`, { params: { query: query || undefined } })
+    return data
+  },
+  async applyArtistMatch(id: string, mbid: string): Promise<void> {
+    await api.post(`/media/artists/${id}/identify`, { mbid })
+  },
+  async refreshArtistMeta(id: string): Promise<void> {
+    await api.post(`/media/artists/${id}/refresh-meta`)
+  },
+  async identifyAlbum(id: string, query?: string, artist?: string): Promise<{ query: string; candidates: AlbumCandidate[] }> {
+    const { data } = await api.get(`/media/albums/${id}/identify`, { params: { query: query || undefined, artist: artist || undefined } })
+    return data
+  },
+  async applyAlbumMatch(id: string, mbid: string): Promise<void> {
+    await api.post(`/media/albums/${id}/identify`, { mbid })
+  },
+  async refreshAlbumMeta(id: string): Promise<void> {
+    await api.post(`/media/albums/${id}/refresh-meta`)
+  },
+  async lockMeta(kind: 'movies' | 'shows' | 'artists' | 'albums', id: string, locked: boolean): Promise<void> {
+    await api.post(`/media/${kind}/${id}/lock-meta`, { locked })
+  },
+
   // Web radio
   async getRadioStations(params?: { q?: string; tag?: string; country?: string; mine?: boolean }): Promise<RadioStation[]> {
     const { data } = await api.get('/media/radio/stations', { params })
@@ -490,12 +620,47 @@ export const mediaApi = {
     return data.results ?? []
   },
 
+  // Web TV
+  async getTvChannels(params?: { q?: string; category?: string; mine?: boolean }): Promise<TvChannel[]> {
+    const { data } = await api.get('/media/tv/channels', { params })
+    return data.channels ?? []
+  },
+  async getTvCategories(): Promise<Array<{ category: string; count: number }>> {
+    const { data } = await api.get('/media/tv/categories')
+    return data.categories ?? []
+  },
+  async getTvFavorites(): Promise<TvChannel[]> {
+    const { data } = await api.get('/media/tv/favorites')
+    return data.channels ?? []
+  },
+  async getTvRecent(): Promise<TvChannel[]> {
+    const { data } = await api.get('/media/tv/recent')
+    return data.channels ?? []
+  },
+  async createTvChannel(dto: { name: string; stream_url: string; homepage?: string; logo?: string; categories?: string[]; country?: string; language?: string }): Promise<void> {
+    await api.post('/media/tv/channels', dto)
+  },
+  async deleteTvChannel(id: string): Promise<void> {
+    await api.delete(`/media/tv/channels/${id}`)
+  },
+  async toggleTvFavorite(id: string): Promise<{ is_favorite: boolean }> {
+    const { data } = await api.post(`/media/tv/channels/${id}/favorite`)
+    return data
+  },
+  async recordTvPlay(id: string): Promise<void> {
+    api.post(`/media/tv/channels/${id}/play`).catch(() => {})
+  },
+  async discoverTv(q: string, country?: string, category?: string): Promise<TvDiscoverResult[]> {
+    const { data } = await api.get('/media/tv/discover', { params: { q, country, category } })
+    return data.results ?? []
+  },
+
   // Admin settings
-  async getAdminSettings(): Promise<{ metadata_language?: string }> {
+  async getAdminSettings(): Promise<{ metadata_language?: string; tmdb_api_key?: string; omdb_api_key?: string }> {
     const { data } = await api.get('/media/admin/settings')
     return data
   },
-  async patchAdminSettings(dto: { metadata_language?: string }): Promise<void> {
+  async patchAdminSettings(dto: { metadata_language?: string; tmdb_api_key?: string; omdb_api_key?: string }): Promise<void> {
     await api.patch('/media/admin/settings', dto)
   },
   async triggerEnrich(): Promise<{ queued: number; message: string }> {

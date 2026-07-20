@@ -10,3 +10,5 @@ pub mod progress;
 pub mod search;
 pub mod admin;
 pub mod radio;
+pub mod identify;
+pub mod tv;

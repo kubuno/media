@@ -5,11 +5,13 @@ import {
   ArrowLeft, Play, Star, Clock, Film as FilmIcon,
   Calendar, Globe, Loader2, Monitor, Shield, HardDrive,
   ChevronLeft, ChevronRight, Check, Clapperboard,
+  MoreHorizontal, RefreshCw, Target, Unlink, Lock, Unlock,
 } from 'lucide-react'
 import { mediaApi, posterUrl, type Movie, type CastMember } from '../api'
 import { useMediaVideoStore } from '../store/mediaVideoStore'
 import { useTrailerStore } from '../store/trailerStore'
-import { Button } from '@ui'
+import { useIdentifyStore } from '../store/identifyStore'
+import { Button, MenuDropdown, useMenuDropdown, type MenuItem } from '@ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -152,6 +154,8 @@ export default function MovieDetailPage() {
   const queryClient    = useQueryClient()
   const openPlayer     = useMediaVideoStore(s => s.open)
   const openTrailer    = useTrailerStore(s => s.openTrailer)
+  const openIdentify   = useIdentifyStore(s => s.open)
+  const metaMenu       = useMenuDropdown()
   const [imgError, setImgError]           = useState(false)
   const [posterModal, setPosterModal]     = useState(false)
 
@@ -218,6 +222,31 @@ export default function MovieDetailPage() {
       old ? { ...old, poster_path: url } : old
     )
   }
+
+  const refreshMovieViews = () => {
+    void queryClient.invalidateQueries({ queryKey: ['media', 'movie', id] })
+    void queryClient.invalidateQueries({ queryKey: ['media', 'movies'] })
+  }
+  const locked = movie.meta_locked === true
+  const metaItems: MenuItem[] = [
+    { type: 'action', icon: <Target className="w-4 h-4" />, label: 'Identifier…',
+      onClick: () => openIdentify({ kind: 'movie', id: movie.id, name: movie.title, year }) },
+    { type: 'action', icon: <RefreshCw className="w-4 h-4" />, label: 'Rafraîchir les métadonnées',
+      disabled: locked,
+      onClick: () => {
+        void mediaApi.refreshMetadata(movie.id).then(() => {
+          // Background enrichment — refresh views once it had time to land.
+          setTimeout(refreshMovieViews, 5000)
+        }).catch(() => {})
+      } },
+    { type: 'action', icon: <Unlink className="w-4 h-4" />, label: 'Dissocier les métadonnées',
+      disabled: locked,
+      onClick: () => { void mediaApi.dissociate(movie.id).then(refreshMovieViews).catch(() => {}) } },
+    { type: 'separator' },
+    { type: 'action', icon: locked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />,
+      label: locked ? 'Déverrouiller les métadonnées' : 'Verrouiller les métadonnées',
+      onClick: () => { void mediaApi.lockMeta('movies', movie.id, !locked).then(refreshMovieViews) } },
+  ]
 
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-surface-0">
@@ -290,9 +319,27 @@ export default function MovieDetailPage() {
                 {runtime}
               </span>
               {movie.vote_average && movie.vote_average > 0 && (
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1" title="Note TMDB">
                   <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
                   {movie.vote_average.toFixed(1)}
+                </span>
+              )}
+              {movie.ratings?.rotten_tomatoes && (
+                <span title="Rotten Tomatoes"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600/85 text-white text-xs font-semibold">
+                  🍅 {movie.ratings.rotten_tomatoes}
+                </span>
+              )}
+              {movie.ratings?.imdb && (
+                <span title="IMDb"
+                  className="px-1.5 py-0.5 rounded bg-yellow-400/90 text-black text-xs font-bold">
+                  IMDb {movie.ratings.imdb}
+                </span>
+              )}
+              {movie.ratings?.metacritic && (
+                <span title="Metacritic"
+                  className="px-1.5 py-0.5 rounded bg-emerald-600/85 text-white text-xs font-semibold">
+                  MC {movie.ratings.metacritic.split('/')[0]}
                 </span>
               )}
               {resolution && (
@@ -329,6 +376,16 @@ export default function MovieDetailPage() {
                 <Clapperboard className="w-4 h-4" />
                 Bande annonce
               </button>
+              <button
+                onClick={metaMenu.open}
+                aria-label="Plus d'options"
+                className="flex items-center px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full border border-white/20 transition-colors"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+              {metaMenu.isOpen && metaMenu.pos && (
+                <MenuDropdown pos={metaMenu.pos} onClose={metaMenu.close} items={metaItems} />
+              )}
             </div>
           </div>
         </div>

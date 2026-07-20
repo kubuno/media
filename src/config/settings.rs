@@ -79,12 +79,27 @@ pub struct TranscodingSettings {
     pub keep_transcode_days:  u32,
 }
 
+fn default_tmdb_base() -> String { "https://api.themoviedb.org/3".to_string() }
+fn default_tmdb_image_base() -> String { "https://image.tmdb.org/t/p".to_string() }
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MetadataSettings {
     pub metadata_language:  String,
     pub musicbrainz_url:    String,
     pub cover_art_url:      String,
     pub musicbrainz_agent:  String,
+    /// Official TMDB API key (primary metadata provider). Empty = use
+    /// the keyless fallback. Can be overridden by the `tmdb_api_key` DB setting.
+    #[serde(default)]
+    pub tmdb_api_key:       String,
+    #[serde(default = "default_tmdb_base")]
+    pub tmdb_base_url:      String,
+    #[serde(default = "default_tmdb_image_base")]
+    pub tmdb_image_base:    String,
+    /// OMDb API key — relays Rotten Tomatoes / IMDb / Metacritic ratings
+    /// (free at omdbapi.com). Can be overridden by the `omdb_api_key` DB setting.
+    #[serde(default)]
+    pub omdb_api_key:       String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

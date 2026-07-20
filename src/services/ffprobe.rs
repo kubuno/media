@@ -1,5 +1,22 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::collections::HashMap;
+
+/// Embedded tags (ID3 / Vorbis comments / MP4 atoms) read by ffprobe.
+/// These are far more reliable than guessing from the file path.
+#[derive(Debug, Default, Clone)]
+pub struct MediaTags {
+    pub title:        Option<String>,
+    pub artist:       Option<String>,
+    pub album_artist: Option<String>,
+    pub album:        Option<String>,
+    pub track_number: Option<i32>,
+    pub disc_number:  Option<i32>,
+    pub year:         Option<i32>,
+    pub genre:        Option<String>,
+    pub composer:     Option<String>,
+    pub lyricist:     Option<String>,
+}
 
 #[derive(Debug, Default)]
 pub struct MediaInfo {
@@ -11,6 +28,7 @@ pub struct MediaInfo {
     pub bitrate:       Option<i32>,
     pub sample_rate:   Option<i32>,
     pub channels:      Option<i32>,
+    pub tags:          MediaTags,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,12 +45,67 @@ struct FfprobeStream {
     height:      Option<i32>,
     sample_rate: Option<String>,
     channels:    Option<i32>,
+    tags:        Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct FfprobeFormat {
     duration: Option<String>,
     bit_rate: Option<String>,
+    tags:     Option<HashMap<String, String>>,
+}
+
+/// "3/12" or "3" → 3
+fn parse_track_no(s: &str) -> Option<i32> {
+    s.split('/').next()?.trim().parse().ok()
+}
+
+/// "2021-05-01", "2021" → 2021
+fn parse_year(s: &str) -> Option<i32> {
+    let y: i32 = s.get(..4)?.parse().ok()?;
+    (1000..=2999).contains(&y).then_some(y)
+}
+
+/// Merge format-level and stream-level tags into a case-insensitive map,
+/// then extract the fields we care about. Ogg/Opus put tags on the stream,
+/// MP3/FLAC/M4A on the format — we accept both.
+fn extract_tags(data: &FfprobeOutput) -> MediaTags {
+    let mut map: HashMap<String, String> = HashMap::new();
+    // Stream tags first so format tags (usually authoritative) win on conflict.
+    for stream in &data.streams {
+        if let Some(tags) = &stream.tags {
+            for (k, v) in tags {
+                map.insert(k.to_ascii_lowercase(), v.clone());
+            }
+        }
+    }
+    if let Some(tags) = &data.format.tags {
+        for (k, v) in tags {
+            map.insert(k.to_ascii_lowercase(), v.clone());
+        }
+    }
+
+    let get = |keys: &[&str]| -> Option<String> {
+        keys.iter()
+            .find_map(|k| map.get(*k))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+
+    MediaTags {
+        title:        get(&["title"]),
+        artist:       get(&["artist"]),
+        album_artist: get(&["album_artist", "albumartist", "album artist"]),
+        album:        get(&["album"]),
+        track_number: get(&["track", "tracknumber"]).as_deref().and_then(parse_track_no),
+        disc_number:  get(&["disc", "discnumber"]).as_deref().and_then(parse_track_no),
+        year:         get(&["date", "year", "originaldate", "originalyear"])
+            .as_deref()
+            .and_then(parse_year),
+        genre:        get(&["genre"]),
+        composer:     get(&["composer"]),
+        lyricist:     get(&["lyricist", "text"]),
+    }
 }
 
 pub async fn probe(ffprobe_bin: &str, path: &str) -> Result<MediaInfo> {
@@ -69,6 +142,7 @@ pub async fn probe(ffprobe_bin: &str, path: &str) -> Result<MediaInfo> {
     let mut info = MediaInfo {
         duration_secs,
         bitrate,
+        tags: extract_tags(&data),
         ..Default::default()
     };
 

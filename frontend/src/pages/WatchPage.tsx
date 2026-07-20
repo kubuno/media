@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Film, Clapperboard, Clock, Play, Star,
   Loader2, Film as FilmIcon, ChevronRight, Library, Bookmark,
+  RefreshCw, Target, Home, Tv, Info, X,
 } from 'lucide-react'
-import { mediaApi, posterUrl, formatDuration, type Movie, type TvShow } from '../api'
+import { mediaApi, posterUrl, backdropUrl, formatDuration, type Movie, type TvShow } from '../api'
 import { useMediaSearchStore } from '../store/mediaSearchStore'
+import { useIdentifyStore } from '../store/identifyStore'
+import { useMediaVideoStore } from '../store/mediaVideoStore'
 import { DARK_PAGE } from '../darkTheme'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
 import { Button, MenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
@@ -27,7 +30,7 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
   return (
     <>
       <div onClick={onClick} onContextMenu={handleContextMenu} className="group cursor-pointer">
-        <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-violet-400/40 group-hover:shadow-2xl transition-all duration-300"
+        <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 group-hover:shadow-2xl transition-all duration-300"
              style={{ background: 'rgba(255,255,255,0.05)' }}>
           {poster
             ? <img src={poster} alt={movie.title} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
@@ -44,7 +47,7 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
           <button
             onClick={e => { e.stopPropagation(); onClick() }}
             className="absolute bottom-3 right-3 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-            style={{ background: '#8b5cf6' }}
+            style={{ background: '#2f7dff' }}
             title="Lire">
             <Play className="w-5 h-5 fill-white ml-0.5" />
           </button>
@@ -67,16 +70,22 @@ function ShowCard({ show, onClick }: { show: TvShow; onClick: () => void }) {
   const year   = show.first_air_date ? new Date(show.first_air_date).getFullYear() : null
   const [ctx, setCtx] = useState<MenuDropdownPos | null>(null)
 
+  const openIdentify = useIdentifyStore(s => s.open)
   const menuItems: MenuItem[] = [
     { type: 'action', icon: <Play className="w-4 h-4" />, label: 'Ouvrir', onClick },
     { type: 'action', icon: <Bookmark className="w-4 h-4" />, label: 'Ajouter à ma liste', onClick: () => { mediaApi.addToWatchlist('show', show.id).catch(() => {}) } },
+    { type: 'separator' },
+    { type: 'action', icon: <Target className="w-4 h-4" />, label: 'Identifier…',
+      onClick: () => openIdentify({ kind: 'show', id: show.id, name: show.name }) },
+    { type: 'action', icon: <RefreshCw className="w-4 h-4" />, label: 'Rafraîchir les métadonnées',
+      onClick: () => { mediaApi.refreshShowMeta(show.id).catch(() => {}) } },
   ]
 
   return (
     <>
     <div onClick={onClick} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setCtx({ top: e.clientY, left: e.clientX }) }}
       className="group cursor-pointer">
-      <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-violet-400/40 group-hover:shadow-2xl transition-all duration-300"
+      <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 group-hover:shadow-2xl transition-all duration-300"
            style={{ background: 'rgba(255,255,255,0.05)' }}>
         {poster
           ? <img src={poster} alt={show.name} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
@@ -91,7 +100,7 @@ function ShowCard({ show, onClick }: { show: TvShow; onClick: () => void }) {
         )}
         <button onClick={e => { e.stopPropagation(); onClick() }}
           className="absolute bottom-3 right-3 w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
-          style={{ background: '#8b5cf6' }} title="Ouvrir">
+          style={{ background: '#2f7dff' }} title="Ouvrir">
           <Play className="w-5 h-5 fill-white ml-0.5" />
         </button>
       </div>
@@ -193,16 +202,13 @@ function MoviesTab() {
     )
   }
 
-  const displayMovies = search ? movies : (recent.length > 0 ? recent : movies)
+  // The home tab carries the "recently added" rows — this tab is the full grid.
+  void recent
 
   return (
     <div>
-      {!search && recent.length > 0 && (
-        <SectionHeader title="Récemment ajoutés" />
-      )}
-
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
-        {displayMovies.map(movie => (
+        {movies.map(movie => (
           <MovieCard key={movie.id} movie={movie} onClick={() => navigate(`/media/watch/movie/${movie.id}`)} />
         ))}
       </div>
@@ -210,7 +216,214 @@ function MoviesTab() {
   )
 }
 
-// ── Tab: Séries ───────────────────────────────────────────────────────────────
+// ── Tab: Accueil ──────────────────────────────────────────────────────────────
+
+/** Horizontal, scrollable media row. */
+function Row({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-8">
+      <h2 className="text-base font-semibold text-text-primary mb-3">{title}</h2>
+      <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+function HomeTab() {
+  const navigate   = useNavigate()
+  const openPlayer = useMediaVideoStore(s => s.open)
+
+  const { data: continueMovies = [] } = useQuery({
+    queryKey: ['media', 'movies', 'continue'],
+    queryFn:  mediaApi.getContinueWatching,
+  })
+  const { data: recent = [], isLoading: recentLoading } = useQuery({
+    queryKey: ['media', 'movies', 'recent'],
+    queryFn:  mediaApi.getRecentMovies,
+  })
+  const { data: shows = [] } = useQuery({
+    queryKey: ['media', 'shows', 'recent-home'],
+    queryFn:  () => mediaApi.getShows({ limit: 15, sort: 'recent' }),
+  })
+  const { data: watchlist = [] } = useQuery({
+    queryKey: ['media', 'watchlist'],
+    queryFn:  mediaApi.getWatchlist,
+  })
+
+  const hero: Movie | null = continueMovies[0] ?? recent[0] ?? null
+  const heroResume = continueMovies.length > 0 && hero?.id === continueMovies[0]?.id
+  const heroBackdrop = hero ? (backdropUrl(hero.backdrop_path) ?? posterUrl(hero.poster_path, 'w500')) : null
+
+  if (recentLoading) {
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+  }
+
+  if (!hero && shows.length === 0 && watchlist.length === 0) {
+    return (
+      <EmptyState
+        icon={<Film className="w-16 h-16" />}
+        title="Bibliothèque vide"
+        subtitle="Créez une bibliothèque Films ou Séries via le bouton « Bibliothèques » et lancez un scan."
+      />
+    )
+  }
+
+  return (
+    <div>
+      {/* Featured hero */}
+      {hero && (
+        <div className="relative rounded-2xl overflow-hidden mb-8 min-h-[260px] flex items-end"
+             style={{ background: 'rgba(255,255,255,0.04)' }}>
+          {heroBackdrop && (
+            <img src={heroBackdrop} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+          <div className="relative p-6 max-w-2xl">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-white/60 mb-1.5">
+              {heroResume ? 'Reprendre la lecture' : 'À la une'}
+            </p>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight mb-2">{hero.title}</h2>
+            <div className="flex items-center gap-3 text-sm text-white/75 mb-3">
+              {hero.release_date && <span>{new Date(hero.release_date).getFullYear()}</span>}
+              {hero.vote_average && hero.vote_average > 0 && (
+                <span className="flex items-center gap-1">
+                  <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{hero.vote_average.toFixed(1)}
+                </span>
+              )}
+              {hero.duration_secs > 0 && <span>{formatDuration(hero.duration_secs)}</span>}
+            </div>
+            {hero.overview && (
+              <p className="text-sm text-white/70 leading-relaxed line-clamp-2 mb-4">{hero.overview}</p>
+            )}
+            <div className="flex items-center gap-3">
+              <Button icon={<Play className="w-4 h-4 fill-white" />} onClick={() => openPlayer(hero.id, hero.title)}>
+                {heroResume ? 'Reprendre' : 'Lire'}
+              </Button>
+              <button
+                onClick={() => navigate(`/media/watch/movie/${hero.id}`)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium text-sm border border-white/20 transition-colors"
+              >
+                <Info className="w-4 h-4" />
+                Fiche
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reprendre */}
+      {continueMovies.length > 0 && (
+        <Row title="Reprendre">
+          {continueMovies.map(m => (
+            <div key={m.id} className="w-72 flex-shrink-0">
+              <ContinueCard movie={m} onClick={() => navigate(`/media/watch/movie/${m.id}`)} />
+            </div>
+          ))}
+        </Row>
+      )}
+
+      {/* Recently added */}
+      {recent.length > 0 && (
+        <Row title="Récemment ajoutés">
+          {recent.map(m => (
+            <div key={m.id} className="w-[150px] flex-shrink-0">
+              <MovieCard movie={m} onClick={() => navigate(`/media/watch/movie/${m.id}`)} />
+            </div>
+          ))}
+        </Row>
+      )}
+
+      {/* TV shows */}
+      {shows.length > 0 && (
+        <Row title="Séries">
+          {shows.map(s => (
+            <div key={s.id} className="w-[150px] flex-shrink-0">
+              <ShowCard show={s} onClick={() => navigate(`/media/watch/show/${s.id}`)} />
+            </div>
+          ))}
+        </Row>
+      )}
+
+      {/* Ma liste */}
+      {watchlist.length > 0 && (
+        <Row title="Ma liste">
+          {watchlist.map(w => (
+            <div key={`${w.item_type}-${w.item_id}`} className="w-[150px] flex-shrink-0 group cursor-pointer"
+                 onClick={() => navigate(w.item_type === 'show' ? `/media/watch/show/${w.item_id}` : `/media/watch/movie/${w.item_id}`)}>
+              <div className="aspect-[2/3] rounded-xl overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 transition-all"
+                   style={{ background: 'rgba(255,255,255,0.05)' }}>
+                {posterUrl(w.poster_path)
+                  ? <img src={posterUrl(w.poster_path)!} alt={w.title ?? ''} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+                  : <div className="w-full h-full flex items-center justify-center"><Bookmark className="w-10 h-10 text-white/30" /></div>}
+              </div>
+              <p className="text-sm font-semibold text-text-primary truncate pt-2 px-0.5">{w.title}</p>
+            </div>
+          ))}
+        </Row>
+      )}
+    </div>
+  )
+}
+
+// ── Tab: Ma liste ─────────────────────────────────────────────────────────────
+
+function WatchlistTab() {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['media', 'watchlist'],
+    queryFn:  mediaApi.getWatchlist,
+  })
+
+  const remove = (itemType: string, itemId: string) => {
+    void mediaApi.removeFromWatchlist(itemType as 'movie' | 'show', itemId)
+      .then(() => qc.invalidateQueries({ queryKey: ['media', 'watchlist'] }))
+  }
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-primary animate-spin" /></div>
+  }
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={<Bookmark className="w-16 h-16" />}
+        title="Votre liste est vide"
+        subtitle="Ajoutez des films et séries à votre liste depuis leur fiche ou leur menu contextuel."
+      />
+    )
+  }
+
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+      {items.map(w => (
+        <div key={`${w.item_type}-${w.item_id}`} className="group cursor-pointer relative"
+             onClick={() => navigate(w.item_type === 'show' ? `/media/watch/show/${w.item_id}` : `/media/watch/movie/${w.item_id}`)}>
+          <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 transition-all"
+               style={{ background: 'rgba(255,255,255,0.05)' }}>
+            {posterUrl(w.poster_path)
+              ? <img src={posterUrl(w.poster_path)!} alt={w.title ?? ''} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+              : <div className="w-full h-full flex items-center justify-center"><Bookmark className="w-10 h-10 text-white/30" /></div>}
+            <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/70 text-white text-[10px] font-semibold uppercase tracking-wide">
+              {w.item_type === 'show' ? 'Série' : 'Film'}
+            </span>
+            <button
+              onClick={e => { e.stopPropagation(); remove(w.item_type, w.item_id) }}
+              title="Retirer de ma liste"
+              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 text-white/80 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-sm font-semibold text-text-primary truncate pt-2.5 px-0.5">{w.title}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Tab: Shows ───────────────────────────────────────────────────────────────
 
 function ShowsTab() {
   const navigate = useNavigate()
@@ -281,18 +494,20 @@ function ContinueTab() {
 
 // ── Main WatchPage ────────────────────────────────────────────────────────────
 
-type Tab = 'movies' | 'shows' | 'continue'
+type Tab = 'home' | 'movies' | 'shows' | 'continue' | 'watchlist'
 
 const TAB_PATHS: Record<string, Tab> = {
-  '/media/watch':          'movies',
-  '/media/watch/shows':    'shows',
-  '/media/watch/continue': 'continue',
+  '/media/watch':           'home',
+  '/media/watch/movies':    'movies',
+  '/media/watch/shows':     'shows',
+  '/media/watch/continue':  'continue',
+  '/media/watch/watchlist': 'watchlist',
 }
 
 export default function WatchPage() {
   const navigate     = useNavigate()
   const { pathname } = useLocation()
-  const tab: Tab = TAB_PATHS[pathname] ?? 'movies'
+  const tab: Tab = TAB_PATHS[pathname] ?? 'home'
   const [libPanelOpen, setLibPanelOpen] = useState(false)
 
   const { data: libraries = [] } = useQuery({
@@ -302,23 +517,25 @@ export default function WatchPage() {
   const isScanning = libraries.some(l => l.scan_status === 'scanning')
 
   const TABS = [
-    { id: 'movies'   as Tab, label: 'Films',    icon: Film,         path: '/media/watch' },
-    { id: 'shows'    as Tab, label: 'Séries',   icon: Clapperboard, path: '/media/watch/shows' },
-    { id: 'continue' as Tab, label: 'En cours', icon: Clock,        path: '/media/watch/continue' },
+    { id: 'home'      as Tab, label: 'Accueil',  icon: Home,         path: '/media/watch' },
+    { id: 'movies'    as Tab, label: 'Films',    icon: Film,         path: '/media/watch/movies' },
+    { id: 'shows'     as Tab, label: 'Séries',   icon: Clapperboard, path: '/media/watch/shows' },
+    { id: 'continue'  as Tab, label: 'En cours', icon: Clock,        path: '/media/watch/continue' },
+    { id: 'watchlist' as Tab, label: 'Ma liste', icon: Bookmark,     path: '/media/watch/watchlist' },
   ]
 
   return (
     <div className="flex flex-col h-full" style={DARK_PAGE}>
-      {/* Dark cinematic hero (Plex/Kodi-style) + pill tabs */}
+      {/* Dark cinematic hero + pill tabs */}
       <div className="flex-shrink-0 relative overflow-hidden"
            style={{ background: 'linear-gradient(135deg, #1b1730 0%, #241a3a 55%, #181527 100%)' }}>
         <div className="absolute inset-0 pointer-events-none"
-             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(139,92,246,0.34) 0%, rgba(124,58,237,0.12) 38%, rgba(0,0,0,0) 72%)' }} />
+             style={{ background: 'radial-gradient(95% 130% at 0% 0%, rgba(47,125,255,0.34) 0%, rgba(47,125,255,0.12) 38%, rgba(0,0,0,0) 72%)' }} />
         <div className="relative px-6 pt-6 pb-6">
           <div className="flex items-end justify-between mb-5">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
-                   style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                   style={{ background: 'linear-gradient(135deg, #5aa0ff, #1f66e8)' }}>
                 <Film className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -326,11 +543,16 @@ export default function WatchPage() {
                 <p className="text-xs text-white/55 mt-1.5">Vos films et séries, en grand</p>
               </div>
             </div>
-            <Button size="sm"
-              icon={isScanning ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} />}
-              onClick={() => setLibPanelOpen(true)}>
-              Bibliothèques
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" icon={<Tv size={15} />} onClick={() => navigate('/media/watch/tv')}>
+                TV en direct
+              </Button>
+              <Button size="sm"
+                icon={isScanning ? <Loader2 size={15} className="animate-spin" /> : <Library size={15} />}
+                onClick={() => setLibPanelOpen(true)}>
+                Bibliothèques
+              </Button>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {TABS.map(t => {
@@ -350,9 +572,11 @@ export default function WatchPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        {tab === 'movies'   && <MoviesTab />}
-        {tab === 'shows'    && <ShowsTab />}
-        {tab === 'continue' && <ContinueTab />}
+        {tab === 'home'      && <HomeTab />}
+        {tab === 'movies'    && <MoviesTab />}
+        {tab === 'shows'     && <ShowsTab />}
+        {tab === 'continue'  && <ContinueTab />}
+        {tab === 'watchlist' && <WatchlistTab />}
       </div>
 
       <MediaLibrariesPanel open={libPanelOpen} onClose={() => setLibPanelOpen(false)} />
