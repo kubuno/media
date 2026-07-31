@@ -18,7 +18,7 @@ function EqSlider({ value, onChange, label }: {
 }) {
   return (
     <div className="flex flex-col items-center gap-1" style={{ width: 28 }}>
-      <span className="text-[9px] font-mono text-blue-300/90" style={{ minWidth: 22, textAlign: 'center' }}>
+      <span className="text-[10px] font-mono text-blue-300/90" style={{ minWidth: 22, textAlign: 'center' }}>
         {value > 0 ? `+${value}` : value}
       </span>
       <div className="relative flex items-stretch justify-center" style={{ height: 120 }}>
@@ -35,7 +35,7 @@ function EqSlider({ value, onChange, label }: {
           aria-label={`${label} Hz`}
         />
       </div>
-      <span className="text-[9px] text-white/40" style={{ minWidth: 22, textAlign: 'center' }}>
+      <span className="text-[10px] text-white/40" style={{ minWidth: 22, textAlign: 'center' }}>
         {label}
       </span>
     </div>
@@ -154,14 +154,14 @@ export function EqualizerPanel() {
         <div className="flex items-center gap-1">
           <button
             onClick={handleReset}
-            className="px-2 py-0.5 text-[9px] font-bold tracking-wider bg-white/10 hover:bg-white/20 rounded transition-colors"
+            className="px-2 py-0.5 text-[10px] font-bold tracking-wider bg-white/10 hover:bg-white/20 rounded transition-colors"
             onMouseDown={e => e.stopPropagation()}
           >
             RESET
           </button>
           <button
             onClick={() => handleBypass(!eq.bypass)}
-            className={`px-2 py-0.5 text-[9px] font-bold tracking-wider rounded transition-colors ${
+            className={`px-2 py-0.5 text-[10px] font-bold tracking-wider rounded transition-colors ${
               eq.bypass ? 'bg-primary text-white' : 'bg-white/10 hover:bg-white/20'
             }`}
             onMouseDown={e => e.stopPropagation()}
@@ -202,7 +202,7 @@ export function EqualizerPanel() {
 
       {/* dB scale */}
       <div className="flex justify-end px-3 pt-2">
-        <div className="flex flex-col justify-between text-[8px] font-mono text-white/30 mr-1" style={{ height: 120 }}>
+        <div className="flex flex-col justify-between text-[10px] font-mono text-white/30 mr-1" style={{ height: 120 }}>
           <span>+{MAX_DB}</span>
           <span>0</span>
           <span>{MIN_DB}</span>
@@ -228,7 +228,7 @@ export function EqualizerPanel() {
             <button
               key={name}
               onClick={() => handlePreset(name)}
-              className={`px-2 py-1 text-[9px] font-bold tracking-wider rounded transition-colors ${
+              className={`px-2 py-1 text-[10px] font-bold tracking-wider rounded transition-colors ${
                 eq.preset === name
                   ? 'bg-primary text-white'
                   : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white/90'

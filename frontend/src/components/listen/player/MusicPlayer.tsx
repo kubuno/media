@@ -279,7 +279,7 @@ function CrossfadeControl() {
           </div>
           <button
             onClick={() => setAuto(!auto)}
-            className="flex items-center justify-between w-full text-[12px] text-text-primary py-1"
+            className="flex items-center justify-between w-full text-xs text-text-primary py-1"
           >
             <span>Enchaînement auto<br /><span className="text-[10px] text-text-tertiary">fondu en fin de titre</span></span>
             <span className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${auto ? 'bg-primary' : 'bg-surface-3'}`}>
