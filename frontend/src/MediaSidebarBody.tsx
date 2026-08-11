@@ -46,7 +46,7 @@ export default function MediaSidebarBody({ collapsed = false }: { collapsed?: bo
     pathname === path || pathname.startsWith(path + '/')
 
   return (
-    <nav className={`flex-1 overflow-y-auto py-1 space-y-0.5 ${collapsed ? "px-2" : "px-3"}`}>
+    <nav className={`flex-1 overflow-y-auto py-1 space-y-0.5 px-2`}>
       <SectionLabel collapsed={collapsed} label={t('media_section_video')} />
       {WATCH_ITEMS.map(({ labelKey, icon, path }) => (
         <SidebarNavItem collapsed={collapsed} key={path} label={t(labelKey)} icon={icon}
