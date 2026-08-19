@@ -1,6 +1,7 @@
 /** Media MODULE bundle — loaded at runtime (see vite.module.config). */
 import { lazy } from 'react'
 import { RouteRegistry, WaffleAppRegistry, SlotRegistry, ModuleSettingsRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
+import { registerMediaAdmin } from './admin/MediaAdminPanel'
 import { useMediaSearchStore } from './store/mediaSearchStore'
 import { Tv, Music } from 'lucide-react'
 import './index.css'
@@ -24,6 +25,9 @@ export function register() {
 
   // The header gear button opens the per-user Media settings while in /media.
   ModuleSettingsRegistry.register('media')
+
+  // Instance administration (metadata provider keys) in the core admin console.
+  registerMediaAdmin()
 
   useSidebarStore.getState().register({
     moduleId:    'media',

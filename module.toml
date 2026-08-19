@@ -47,3 +47,84 @@ publishes = [
     "MediaPlayed",
     "PlaylistUpdated",
 ]
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Media — admin panel pages
+# ══════════════════════════════════════════════════════════════════════════════
+# Each becomes an entry of the admin menu (Modules → Media), at its own address
+# (/admin/modules/media/<id>). The metadata provider keys are SECRETS the module
+# keeps in its own `media.settings` table, contributed as a custom section
+# through ModuleAdminRegistry; the scalars below travel through the core and are
+# read back by the module from `/internal/modules/media/settings`.
+#
+# NOTE: library management already lives in its own admin-gated panel (opened
+# from Watch/Listen), not on any user page, so it is not declared here yet.
+# Consolidating it into a second "Bibliothèques" pane is a follow-up.
+
+[[setting_groups]]
+id          = "metadata"
+label       = "Métadonnées"
+icon        = "Globe"
+position    = 1
+description  = "La langue des métadonnées et les clés d'API des fournisseurs (TMDB, OMDb), plus le ré-enrichissement."
+
+[[setting_groups]]
+id          = "playback"
+label       = "Lecture et contrôle parental"
+icon        = "PlayCircle"
+position    = 2
+description = "Limite d'âge appliquée à la lecture des films et à leur affichage dans les listes, la fiche détaillée et la recherche. Les administrateurs ne sont jamais bridés, afin de pouvoir vérifier ce qu'ils configurent."
+
+[[setting_groups]]
+id          = "scanning"
+label       = "Analyse des bibliothèques"
+icon        = "RefreshCw"
+position    = 3
+description = "Fréquence à laquelle les dossiers surveillés sont ré-analysés en entier. La détection des nouveaux fichiers en temps réel, elle, reste toujours active."
+
+# ── Lecture et contrôle parental ─────────────────────────────────────────────
+
+[[settings]]
+key     = "max_content_age"
+scope   = "global"
+group   = "playback"
+type    = "enum"
+default = 0
+label   = "Limite d'âge des contenus"
+description = "Âge maximal autorisé pour la lecture. La classification est celle portée par les métadonnées des FILMS (champ « classification ») : les séries n'en portent pas et relèvent donc du réglage « contenus sans classification ». Les administrateurs ne sont pas concernés."
+values  = [
+    { value = 0,  label = "Aucune restriction" },
+    { value = 6,  label = "À partir de 6 ans" },
+    { value = 10, label = "À partir de 10 ans" },
+    { value = 12, label = "À partir de 12 ans" },
+    { value = 16, label = "À partir de 16 ans" },
+    { value = 18, label = "Adultes uniquement (18 ans)" },
+]
+
+[[settings]]
+key     = "block_unrated_content"
+scope   = "global"
+group   = "playback"
+type    = "bool"
+default = false
+label   = "Bloquer les contenus sans classification"
+description = "Un film dont les métadonnées ne portent aucune classification reconnue est refusé au lieu d'être laissé passer. Sans effet tant qu'aucune limite d'âge n'est active."
+
+# ── Analyse des bibliothèques ────────────────────────────────────────────────
+
+[[settings]]
+key     = "library_rescan_minutes"
+scope   = "global"
+group   = "scanning"
+type    = "enum"
+default = 5
+label   = "Ré-analyse complète des bibliothèques"
+description = "Intervalle entre deux parcours complets des dossiers surveillés, qui rattrapent les fichiers ajoutés hors surveillance et prennent en compte les nouvelles bibliothèques. Sur de très grandes collections, espacer ce cycle allège nettement la charge disque."
+values  = [
+    { value = 0,    label = "Jamais (analyse manuelle uniquement)" },
+    { value = 5,    label = "Toutes les 5 minutes" },
+    { value = 15,   label = "Toutes les 15 minutes" },
+    { value = 60,   label = "Toutes les heures" },
+    { value = 360,  label = "Toutes les 6 heures" },
+    { value = 1440, label = "Une fois par jour" },
+]

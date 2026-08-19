@@ -9,15 +9,22 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::config::Settings;
+use crate::state::AppState;
 use super::scan;
 
+/// How often the "manual scans only" mode still looks for a library that was
+/// added or removed. It restarts the cycle — and therefore re-scans — only when
+/// the set of libraries actually changed, so an administrator who asked for no
+/// periodic re-scan gets none.
+const LIBRARY_CHANGE_POLL: Duration = Duration::from_secs(60);
+
 /// Lance le watcher filesystem pour toutes les bibliothèques actives.
-/// Recharge la liste des bibliothèques toutes les 5 minutes pour
-/// prendre en compte les ajouts/suppressions.
-pub async fn start(db: PgPool, settings: Arc<Settings>) {
+/// Le cycle redémarre (et re-scanne intégralement) à l'intervalle réglé par
+/// l'administrateur — `library_rescan_minutes`, relu à chaque tour.
+pub async fn start(state: AppState) {
     tokio::spawn(async move {
         loop {
-            if let Err(e) = run_watch_cycle(&db, &settings).await {
+            if let Err(e) = run_watch_cycle(&state).await {
                 tracing::error!(error = %e, "Watcher filesystem erreur, redémarrage dans 60s");
                 tokio::time::sleep(Duration::from_secs(60)).await;
             }
@@ -25,7 +32,9 @@ pub async fn start(db: PgPool, settings: Arc<Settings>) {
     });
 }
 
-async fn run_watch_cycle(db: &PgPool, settings: &Arc<Settings>) -> Result<()> {
+async fn run_watch_cycle(state: &AppState) -> Result<()> {
+    let db       = &state.db;
+    let settings = &state.settings;
     // Charger les bibliothèques
     let libs = sqlx::query!(
         "SELECT id, path, lib_type FROM media.libraries ORDER BY created_at"
@@ -77,18 +86,72 @@ async fn run_watch_cycle(db: &PgPool, settings: &Arc<Settings>) -> Result<()> {
         }
     }
 
-    // Recharger les bibliothèques toutes les 5 min (nouveau watcher)
-    let reload_at = tokio::time::Instant::now() + Duration::from_secs(300);
+    // Restarting the cycle is what performs the periodic FULL re-scan (each
+    // library is re-scanned above when its watch is installed) and what picks up
+    // libraries added or removed meanwhile. Its period is the administrator's
+    // `library_rescan_minutes`, read here rather than at boot so an edit in the
+    // console applies at the next cycle without a restart.
+    let cfg = state.instance();
+    match cfg.rescan_interval() {
+        Some(interval) => {
+            let reload_at = tokio::time::Instant::now() + interval;
+            loop {
+                tokio::select! {
+                    Some(event) = rx.recv() => {
+                        handle_event(event, &path_to_lib, db, settings).await;
+                    }
+                    _ = tokio::time::sleep_until(reload_at) => return Ok(()),
+                }
+            }
+        }
+        None => {
+            // "Manual scans only": no periodic re-scan. The inotify watcher keeps
+            // indexing files as they appear; the cycle is only restarted when the
+            // set of libraries changed, otherwise a new library would never be
+            // watched until the module restarts.
+            let known: Vec<(Uuid, String)> = {
+                let mut v: Vec<(Uuid, String)> =
+                    libs.iter().map(|l| (l.id, l.path.clone())).collect();
+                v.sort();
+                v
+            };
+            loop {
+                tokio::select! {
+                    Some(event) = rx.recv() => {
+                        handle_event(event, &path_to_lib, db, settings).await;
+                    }
+                    _ = tokio::time::sleep(LIBRARY_CHANGE_POLL) => {
+                        // An admin edit re-arming the periodic re-scan must also
+                        // take effect: restart the cycle to pick the new value up.
+                        if state.instance().rescan_interval().is_some() {
+                            return Ok(());
+                        }
+                        if let Some(current) = library_fingerprint(db).await {
+                            if current != known {
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
-    loop {
-        tokio::select! {
-            Some(event) = rx.recv() => {
-                handle_event(event, &path_to_lib, db, settings).await;
-            }
-            _ = tokio::time::sleep_until(reload_at) => {
-                // Redémarrer le cycle pour prendre en compte de nouvelles bibliothèques
-                return Ok(());
-            }
+/// Sorted (id, path) pairs of every library, for change detection. Runtime query
+/// (never a macro: the module ships a `.sqlx` offline cache). `None` on error, so
+/// a transient database hiccup does not trigger a pointless full re-scan.
+async fn library_fingerprint(db: &PgPool) -> Option<Vec<(Uuid, String)>> {
+    match sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, path FROM media.libraries ORDER BY id, path",
+    )
+    .fetch_all(db)
+    .await
+    {
+        Ok(rows) => Some(rows),
+        Err(e) => {
+            tracing::error!(error = %e, "Watcher : lecture des bibliothèques");
+            None
         }
     }
 }

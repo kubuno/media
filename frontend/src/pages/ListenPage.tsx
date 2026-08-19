@@ -8,7 +8,8 @@ import {
   MoreHorizontal, RefreshCw, Target, Unlock,
 } from 'lucide-react'
 import { mediaApi, posterUrl, formatDuration, type Artist, type Album, type Track, type Playlist } from '../api'
-import { Checkbox, Button, MenuDropdown, Input, useMenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
+import { Checkbox, Button, ConfirmDialog, MenuDropdown, Input, useMenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
+import { useConfirm } from '@kubuno/sdk'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
 import { usePlayerStore, type PlayerTrack } from '../store/playerStore'
 import { useMediaSearchStore } from '../store/mediaSearchStore'
@@ -462,6 +463,7 @@ function SortSelect({ value, onChange, options }: { value: string; onChange: (v:
 function PlaylistsTab() {
   const navigate    = useNavigate()
   const qc          = useQueryClient()
+  const { confirm, confirmState, handleConfirm, handleCancel } = useConfirm()
   const [dialog,    setDialog]    = useState<'create' | 'edit' | null>(null)
   const [editTarget, setEditTarget] = useState<Playlist | null>(null)
 
@@ -494,8 +496,16 @@ function PlaylistsTab() {
   })
 
   const handleRename = (p: Playlist) => { setEditTarget(p); setDialog('edit') }
-  const handleDelete = (p: Playlist) => {
-    if (confirm(`Supprimer la playlist « ${p.name} » ?`)) deleteMut.mutate(p.id)
+  const handleDelete = async (p: Playlist) => {
+    // Project rule: never a browser dialog — the shared ConfirmDialog, like the
+    // radio and TV tabs of this same module.
+    const ok = await confirm({
+      title: 'Supprimer la playlist',
+      message: `Supprimer la playlist « ${p.name} » ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    })
+    if (ok) deleteMut.mutate(p.id)
   }
   const handleTogglePublic = (p: Playlist) => {
     updateMut.mutate({ id: p.id, name: p.name, description: p.description ?? '', is_public: !p.is_public })
@@ -554,6 +564,9 @@ function PlaylistsTab() {
           onSave={d => updateMut.mutate({ id: editTarget.id, ...d })}
           onClose={() => { setDialog(null); setEditTarget(null) }}
         />
+      )}
+      {confirmState && (
+        <ConfirmDialog {...confirmState} onConfirm={handleConfirm} onCancel={handleCancel} />
       )}
     </>
   )

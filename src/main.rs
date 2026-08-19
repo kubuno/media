@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use kubuno_media::{config::Settings, router, state::AppState, workers};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -16,6 +16,53 @@ struct Manifest {
     #[serde(default)]
     sidebar_items: Vec<SidebarItemRaw>,
     events:        Option<ManifestEvents>,
+    /// Declarative instance settings, stored by the core and read back through
+    /// `/internal/modules/media/settings`. The metadata provider KEYS are not
+    /// here: being secrets, they stay in the module's own `media.settings`
+    /// table behind a custom admin section.
+    #[serde(default)]
+    settings:      Vec<SettingDefRaw>,
+    /// Pages the admin panel is split into (`[[setting_groups]]`). Each becomes
+    /// an entry of the admin menu with its own address.
+    #[serde(default)]
+    setting_groups: Vec<SettingGroupRaw>,
+}
+
+/// One `[[setting_groups]]` entry of module.toml, forwarded verbatim. `id` is a
+/// STABLE, UNTRANSLATED slug: it travels in the URL of the admin page.
+#[derive(Deserialize, Serialize)]
+struct SettingGroupRaw {
+    id:          String,
+    label:       String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    icon:        Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    position:    Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+}
+
+/// One `[[settings]]` entry (declarative scalar), forwarded verbatim to the core
+/// so the console can render its form.
+#[derive(Deserialize, Serialize)]
+struct SettingDefRaw {
+    key:         String,
+    scope:       String,
+    #[serde(rename = "type")]
+    value_type:  String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    values:      Option<Value>,
+    default:     Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    label:       Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    category:    Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    group:       Option<String>,
+    #[serde(default)]
+    public:      bool,
 }
 
 #[derive(Deserialize)]
@@ -147,12 +194,43 @@ async fn main() -> Result<()> {
         .await
         .context("Initialisation du stockage local")?;
 
+    // Instance settings: compiled defaults, then one read from the core so the
+    // parental control and the re-scan cycle start with the administrator's
+    // values rather than with the defaults for the first minute.
+    let instance = Arc::new(std::sync::RwLock::new(
+        kubuno_media::config::instance::InstanceConfig::default(),
+    ));
+    if let Some(cfg) = kubuno_media::config::instance::fetch(
+        &http, &settings.core.url, &settings.core.internal_secret,
+    ).await {
+        if let Ok(mut w) = instance.write() { *w = cfg; }
+    }
+
     let state = AppState {
         db:       pool,
         settings: Arc::new(settings.clone()),
         storage:  Arc::new(storage),
         http:     http.clone(),
+        instance: instance.clone(),
     };
+
+    // Instance-settings refresher: an admin edit takes effect within a minute,
+    // no restart. A failed read keeps the last good values.
+    {
+        let http_r     = http.clone();
+        let settings_r = settings.clone();
+        let instance_r = instance.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                if let Some(cfg) = kubuno_media::config::instance::fetch(
+                    &http_r, &settings_r.core.url, &settings_r.core.internal_secret,
+                ).await {
+                    if let Ok(mut w) = instance_r.write() { *w = cfg; }
+                }
+            }
+        });
+    }
 
     // Worker metadata TMDB (tourne en continu, traite les pending_meta)
     workers::metadata::start(state.db.clone(), state.settings.clone()).await;
@@ -167,8 +245,9 @@ async fn main() -> Result<()> {
                 startup_scan(&db2, &s2).await;
             });
         }
-        // Watcher pour les nouveaux fichiers en temps réel
-        workers::watcher::start(state.db.clone(), state.settings.clone()).await;
+        // Watcher pour les nouveaux fichiers en temps réel. Il reçoit l'AppState
+        // entier pour relire l'intervalle de ré-analyse à chaque cycle.
+        workers::watcher::start(state.clone()).await;
     }
 
     // Enregistrement auprès du core (avec retry infini)
@@ -268,11 +347,20 @@ async fn register_with_core(http: &Client, settings: &Settings) {
         .map(|e| e.subscribed.clone())
         .unwrap_or_else(|| vec!["UserDeleted".into()]);
 
+    let settings_schema: Value = manifest.as_ref()
+        .map(|m| serde_json::to_value(&m.settings).unwrap_or_else(|_| json!([])))
+        .unwrap_or_else(|| json!([]));
+    let setting_groups: Value = manifest.as_ref()
+        .map(|m| serde_json::to_value(&m.setting_groups).unwrap_or_else(|_| json!([])))
+        .unwrap_or_else(|| json!([]));
+
     let payload = json!({
         "module_id":         "media",
         "display_name":      display_name,
         "description":       description,
         "settings_path":     settings_path,
+        "settings_schema":   settings_schema,
+        "setting_groups":    setting_groups,
         "base_url":          base_url,
         "version":           env!("CARGO_PKG_VERSION"),
         "routes":            [{ "method": "*", "path": "/*" }],

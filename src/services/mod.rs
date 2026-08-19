@@ -11,6 +11,7 @@ pub mod lyrics;
 pub mod deezer;
 pub mod theaudiodb;
 pub mod nfo;
+pub mod parental;
 pub mod covers;
 pub mod omdb;
 pub mod tv_catalog;

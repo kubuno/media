@@ -14,16 +14,42 @@ use uuid::Uuid;
 use crate::{
     errors::MediaError,
     middleware::auth::AuthUser,
-    services::{ffmpeg, hls},
+    services::{ffmpeg, hls, parental},
     state::AppState,
 };
+
+/// HARD parental gate. This is the point that decides whether the bytes of a
+/// file may leave the server, and the only one that matters: the list filters
+/// elsewhere are cosmetic, a guessed id would defeat them.
+///
+/// Administrators are never restricted — they must be able to check what they
+/// configured. The certification is read with a dedicated RUNTIME query (never a
+/// macro: the module ships a `.sqlx` offline cache) which yields nothing for a
+/// TV episode, correctly treating it as unrated.
+async fn ensure_playable(
+    state: &AppState,
+    user: &AuthUser,
+    item_id: Uuid,
+) -> Result<(), MediaError> {
+    let cfg = state.instance();
+    if !cfg.parental_active() || user.role == "admin" {
+        return Ok(());
+    }
+    let rating = parental::rating_of(&state.db, item_id).await?;
+    if parental::is_allowed(rating.as_deref(), cfg.max_content_age, cfg.block_unrated_content) {
+        return Ok(());
+    }
+    tracing::info!(item_id = %item_id, "Lecture refusée par le contrôle parental");
+    Err(MediaError::Forbidden)
+}
 
 /// Génère ou renvoie la playlist HLS maître pour un item (film ou épisode).
 pub async fn master_playlist(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
     Path(item_id): Path<Uuid>,
 ) -> Result<Response, MediaError> {
+    ensure_playable(&state, &user, item_id).await?;
     if !ffmpeg::is_available(&state.settings.transcoding.ffmpeg_bin) {
         return Err(MediaError::Ffmpeg("FFmpeg non disponible".into()));
     }
@@ -58,9 +84,10 @@ async fn video_file_path(db: &sqlx::PgPool, id: Uuid) -> Result<Option<String>, 
 
 pub async fn quality_playlist(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
     Path((item_id, quality)): Path<(Uuid, String)>,
 ) -> Result<Response, MediaError> {
+    ensure_playable(&state, &user, item_id).await?;
     let cache = &state.settings.libraries.cache_path;
     let playlist_path = hls::playlist_path(cache, &item_id.to_string(), &quality);
 
@@ -105,9 +132,10 @@ pub async fn quality_playlist(
 /// Renvoie un segment HLS (.ts).
 pub async fn hls_segment(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
     Path((item_id, quality, seg)): Path<(Uuid, String, u32)>,
 ) -> Result<Response, MediaError> {
+    ensure_playable(&state, &user, item_id).await?;
     let cache = &state.settings.libraries.cache_path;
     let seg_path = hls::segment_path(cache, &item_id.to_string(), &quality, seg);
 
@@ -121,10 +149,11 @@ pub async fn hls_segment(
 /// Stream direct sans transcription — supporte les Range requests pour la navigation.
 pub async fn direct_stream(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
     Path(item_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Response, MediaError> {
+    ensure_playable(&state, &user, item_id).await?;
     let path = video_file_path(&state.db, item_id)
         .await?
         .ok_or_else(|| MediaError::NotFound(format!("Vidéo {item_id}")))?;

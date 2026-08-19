@@ -5,7 +5,9 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{errors::MediaError, middleware::auth::AuthUser, state::AppState};
+use uuid::Uuid;
+
+use crate::{errors::MediaError, middleware::auth::AuthUser, services::parental, state::AppState};
 
 #[derive(Debug, Deserialize)]
 pub struct SearchQuery {
@@ -15,7 +17,7 @@ pub struct SearchQuery {
 
 pub async fn search(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
     Query(q): Query<SearchQuery>,
 ) -> Result<Json<Value>, MediaError> {
     if q.q.trim().is_empty() {
@@ -80,8 +82,32 @@ pub async fn search(
     .fetch_all(&state.db)
     .await?;
 
+    // Parental control: the search query is a `query!` macro backed by the
+    // shipped `.sqlx` cache, so the age limit is applied here, in Rust, on the
+    // rows it returned. The certifications are read separately. A result page
+    // may therefore come back shorter; the HARD gate stays in `handlers::stream`.
+    // Administrators are never filtered.
+    let cfg = state.instance();
+    let movie_visible: Option<std::collections::HashSet<Uuid>> =
+        if cfg.parental_active() && user.role != "admin" {
+            let ids: Vec<Uuid> = movies.iter().map(|m| m.id).collect();
+            let ratings = parental::ratings_for(&state.db, &ids).await;
+            Some(
+                ids.into_iter()
+                    .filter(|id| {
+                        let rating = ratings.get(id).and_then(|r| r.as_deref());
+                        parental::is_allowed(rating, cfg.max_content_age, cfg.block_unrated_content)
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
     Ok(Json(json!({
-        "movies": movies.iter().map(|m| json!({
+        "movies": movies.iter()
+            .filter(|m| match &movie_visible { Some(v) => v.contains(&m.id), None => true })
+            .map(|m| json!({
             "id":           m.id,
             "title":        m.title,
             "release_date": m.release_date,

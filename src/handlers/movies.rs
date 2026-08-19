@@ -10,8 +10,43 @@ use crate::{
     errors::MediaError,
     middleware::auth::AuthUser,
     models::video::ListMoviesQuery,
+    services::parental,
     state::AppState,
 };
+
+/// Drops the movies the instance's age limit hides from this user.
+///
+/// Filtering happens in RUST, on rows already deserialised, because the list
+/// queries are `query!` macros backed by the shipped `.sqlx` offline cache and
+/// must not gain a WHERE clause. Two consequences, accepted knowingly:
+///   * a paginated page can come back SHORTER than its limit — the client shows
+///     fewer cards, it never shows a forbidden one;
+///   * this is a display filter only. The HARD gate is in `handlers::stream`,
+///     which is what actually refuses to serve the bytes.
+///
+/// Administrators are never filtered: they must see what they configured.
+/// `ids` are the movie ids of the rows, in order; the returned set is the ids
+/// that may be shown.
+async fn visible_movie_ids(
+    state: &AppState,
+    user: &AuthUser,
+    ids: &[Uuid],
+) -> Option<std::collections::HashSet<Uuid>> {
+    let cfg = state.instance();
+    if !cfg.parental_active() || user.role == "admin" {
+        return None; // nothing to filter
+    }
+    let ratings = parental::ratings_for(&state.db, ids).await;
+    Some(
+        ids.iter()
+            .copied()
+            .filter(|id| {
+                let rating = ratings.get(id).and_then(|r| r.as_deref());
+                parental::is_allowed(rating, cfg.max_content_age, cfg.block_unrated_content)
+            })
+            .collect(),
+    )
+}
 
 #[derive(Deserialize)]
 pub struct WatchlistBody {
@@ -26,7 +61,7 @@ pub struct SetPosterBody {
 
 pub async fn list_movies(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
     Query(q): Query<ListMoviesQuery>,
 ) -> Result<Json<Value>, MediaError> {
     let limit  = q.limit.unwrap_or(50).min(200);
@@ -45,24 +80,29 @@ pub async fn list_movies(
     .fetch_all(&state.db)
     .await?;
 
-    let movies: Vec<Value> = rows.into_iter().map(|r| json!({
-        "id":             r.id,
-        "title":          r.title,
-        "original_title": r.original_title,
-        "release_date":   r.release_date,
-        "vote_average":   r.vote_average,
-        "poster_path":    r.poster_path,
-        "backdrop_path":  r.backdrop_path,
-        "duration_secs":  r.duration_secs,
-        "meta_status":    r.meta_status,
-    })).collect();
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let visible = visible_movie_ids(&state, &user, &ids).await;
+
+    let movies: Vec<Value> = rows.into_iter()
+        .filter(|r| match &visible { Some(v) => v.contains(&r.id), None => true })
+        .map(|r| json!({
+            "id":             r.id,
+            "title":          r.title,
+            "original_title": r.original_title,
+            "release_date":   r.release_date,
+            "vote_average":   r.vote_average,
+            "poster_path":    r.poster_path,
+            "backdrop_path":  r.backdrop_path,
+            "duration_secs":  r.duration_secs,
+            "meta_status":    r.meta_status,
+        })).collect();
 
     Ok(Json(json!({ "movies": movies })))
 }
 
 pub async fn get_movie(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
     let row = sqlx::query!(
@@ -81,6 +121,23 @@ pub async fn get_movie(
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| MediaError::NotFound(format!("Film {id}")))?;
+
+    // The detail page already carries the certification, so the age limit is
+    // applied without a second query. Refused outright rather than trimmed: the
+    // sheet is what leads to playback.
+    {
+        let cfg = state.instance();
+        if cfg.parental_active()
+            && user.role != "admin"
+            && !parental::is_allowed(
+                row.content_rating.as_deref(),
+                cfg.max_content_age,
+                cfg.block_unrated_content,
+            )
+        {
+            return Err(MediaError::Forbidden);
+        }
+    }
 
     Ok(Json(json!({
         "id":             row.id,
@@ -117,7 +174,7 @@ pub async fn get_movie(
 
 pub async fn recent_movies(
     State(state): State<AppState>,
-    Extension(_user): Extension<AuthUser>,
+    Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
     let rows = sqlx::query!(
         r#"SELECT id, title, release_date, vote_average::FLOAT8, poster_path, duration_secs
@@ -128,14 +185,19 @@ pub async fn recent_movies(
     .fetch_all(&state.db)
     .await?;
 
-    let movies: Vec<Value> = rows.into_iter().map(|r| json!({
-        "id":           r.id,
-        "title":        r.title,
-        "release_date": r.release_date,
-        "vote_average": r.vote_average,
-        "poster_path":  r.poster_path,
-        "duration_secs": r.duration_secs,
-    })).collect();
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let visible = visible_movie_ids(&state, &user, &ids).await;
+
+    let movies: Vec<Value> = rows.into_iter()
+        .filter(|r| match &visible { Some(v) => v.contains(&r.id), None => true })
+        .map(|r| json!({
+            "id":           r.id,
+            "title":        r.title,
+            "release_date": r.release_date,
+            "vote_average": r.vote_average,
+            "poster_path":  r.poster_path,
+            "duration_secs": r.duration_secs,
+        })).collect();
 
     Ok(Json(json!({ "movies": movies })))
 }
@@ -157,16 +219,21 @@ pub async fn continue_watching(
     .fetch_all(&state.db)
     .await?;
 
-    let items: Vec<Value> = rows.into_iter().map(|r| json!({
-        "id":            r.id,
-        "title":         r.title,
-        "poster_path":   r.poster_path,
-        "backdrop_path": r.backdrop_path,
-        "duration_secs": r.duration_secs,
-        "position_secs": r.position_secs,
-        "percent_played": r.percent_played,
-        "type":          "movie",
-    })).collect();
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let visible = visible_movie_ids(&state, &user, &ids).await;
+
+    let items: Vec<Value> = rows.into_iter()
+        .filter(|r| match &visible { Some(v) => v.contains(&r.id), None => true })
+        .map(|r| json!({
+            "id":            r.id,
+            "title":         r.title,
+            "poster_path":   r.poster_path,
+            "backdrop_path": r.backdrop_path,
+            "duration_secs": r.duration_secs,
+            "position_secs": r.position_secs,
+            "percent_played": r.percent_played,
+            "type":          "movie",
+        })).collect();
 
     Ok(Json(json!({ "items": items })))
 }
@@ -317,14 +384,26 @@ pub async fn get_watchlist(
     .fetch_all(&state.db)
     .await?;
 
-    let items: Vec<Value> = rows.into_iter().map(|r| json!({
-        "item_type":    r.item_type,
-        "item_id":      r.item_id,
-        "added_at":     r.added_at,
-        "title":        r.title,
-        "poster_path":  r.poster_path,
-        "release_date": r.release_date,
-    })).collect();
+    // Only the movie entries carry a certification; show entries pass through.
+    let ids: Vec<Uuid> = rows.iter()
+        .filter(|r| r.item_type == "movie")
+        .map(|r| r.item_id)
+        .collect();
+    let visible = visible_movie_ids(&state, &user, &ids).await;
+
+    let items: Vec<Value> = rows.into_iter()
+        .filter(|r| match &visible {
+            Some(v) => r.item_type != "movie" || v.contains(&r.item_id),
+            None    => true,
+        })
+        .map(|r| json!({
+            "item_type":    r.item_type,
+            "item_id":      r.item_id,
+            "added_at":     r.added_at,
+            "title":        r.title,
+            "poster_path":  r.poster_path,
+            "release_date": r.release_date,
+        })).collect();
 
     Ok(Json(json!({ "items": items })))
 }
