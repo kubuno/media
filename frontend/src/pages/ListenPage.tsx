@@ -443,7 +443,7 @@ function SortSelect({ value, onChange, options }: { value: string; onChange: (v:
     <>
       <button
         onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ top: r.bottom + 4, left: r.right - 200, minWidth: 200 }) }}
-        className="inline-flex items-center gap-2 pl-3 pr-3 py-2 bg-surface-2 border border-border rounded-full text-sm text-text-secondary hover:bg-surface-3 transition-colors"
+        className="inline-flex items-center gap-2 pl-3 pr-3 py-2 bg-surface-2 border border-border rounded-md text-sm text-text-secondary hover:bg-surface-3 transition-colors"
       >
         <ArrowUpDown className="w-3.5 h-3.5 text-text-tertiary" />
         {current}

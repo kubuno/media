@@ -284,7 +284,7 @@ export default function MovieDetailPage() {
               {allPosters.length > 1 && (
                 <button
                   onClick={() => setPosterModal(true)}
-                  className="flex items-center gap-1 text-xs text-white/70 hover:text-white transition-colors bg-black/30 rounded-full px-2 py-0.5"
+                  className="flex items-center gap-1 text-xs text-white/70 hover:text-white transition-colors bg-black/30 rounded-md px-2 py-0.5"
                 >
                   <ChevronLeft className="w-3 h-3" />
                   <ChevronRight className="w-3 h-3" />
@@ -371,7 +371,7 @@ export default function MovieDetailPage() {
               </Button>
               <button
                 onClick={handleTrailer}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium text-sm border border-white/20 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-md font-medium text-sm border border-white/20 transition-colors"
               >
                 <Clapperboard className="w-4 h-4" />
                 Bande annonce

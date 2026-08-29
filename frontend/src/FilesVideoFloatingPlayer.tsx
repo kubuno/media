@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Film, Download, Play, Pause,
   Volume2, VolumeX, Volume1,
-  Maximize2, Minimize2, Maximize, X,
+  Square, Copy, Maximize, Minimize, X,
   Repeat, SkipBack, SkipForward, PictureInPicture2,
 } from 'lucide-react'
 import { FloatingWindow, RangeSlider } from '@ui'
@@ -95,7 +95,7 @@ function MiniPlayer({ file, isPlaying, onToggle, onRestore, onClose }: MiniProps
         onClick={e => { e.stopPropagation(); onRestore() }}
         className="p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
         title={t('media_player_expand')}
-      ><Maximize2 size={14} /></button>
+      ><Square size={14} /></button>
       <button
         onClick={e => { e.stopPropagation(); onClose() }}
         className="p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors"
@@ -401,7 +401,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
             className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-2 transition-colors"
             title={t('media_player_minimize')}
           >
-            <Minimize2 size={15} />
+            <Copy size={14} />
           </button>
         }
       >
@@ -555,7 +555,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
                   className="p-1.5 text-white/55 hover:text-white transition-colors flex-shrink-0"
                   title={isFullscreen ? t('media_player_fullscreen_exit') : t('media_player_fullscreen')}
                 >
-                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize size={14} />}
+                  {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
                 </button>
               </div>
             </div>

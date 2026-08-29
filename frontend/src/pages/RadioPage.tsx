@@ -349,12 +349,12 @@ export default function RadioPage() {
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-4">
                 <button onClick={() => setTag(null)}
-                  className={`px-2 py-1 rounded-full text-xs transition-colors ${!tag ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
+                  className={`px-2 py-1 rounded-md text-xs transition-colors ${!tag ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
                   {t('media_radio_all_genres')}
                 </button>
                 {tags.slice(0, 24).map(({ tag: tg, count }) => (
                   <button key={tg} onClick={() => setTag(tg === tag ? null : tg)}
-                    className={`px-2 py-1 rounded-full text-xs transition-colors ${tg === tag ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
+                    className={`px-2 py-1 rounded-md text-xs transition-colors ${tg === tag ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
                     {tg} <span className="opacity-60">{count}</span>
                   </button>
                 ))}

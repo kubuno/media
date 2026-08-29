@@ -276,7 +276,7 @@ export default function ShowDetailPage() {
               </Button>
               <button
                 onClick={toggleWatchlist}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm border transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-md font-medium text-sm border transition-colors ${
                   inWatchlist ? 'bg-primary text-white border-primary' : 'bg-white/10 hover:bg-white/20 text-white border-white/20'
                 }`}
               >
@@ -335,7 +335,7 @@ export default function ShowDetailPage() {
               <div className="flex flex-wrap gap-1.5">
                 {seasons.map(s => (
                   <button key={s.id} onClick={() => setSeason(s.season_number)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                       s.season_number === activeSeason
                         ? 'bg-primary text-white'
                         : 'bg-surface-2 text-text-secondary hover:bg-surface-3'

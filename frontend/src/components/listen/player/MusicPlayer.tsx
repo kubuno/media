@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Play, Pause, SkipBack, SkipForward,
-  Minimize2, Maximize2, X, Music, Volume2, VolumeX,
+  Copy, Square, X, Music, Volume2, VolumeX,
   Activity, Sliders, Shuffle, Repeat, Repeat1, ListMusic,
   Heart, Gauge, Moon, Mic2, Blend,
 } from 'lucide-react'
@@ -616,7 +616,7 @@ function FullPlayer({ onMinimize, onClose }: {
         className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-2 transition-colors"
         title="Réduire"
       >
-        <Minimize2 size={15} />
+        <Copy size={14} />
       </button>
     </>
   )
@@ -800,7 +800,7 @@ function MiniPlayer() {
         </button>
         <button onClick={e => { e.stopPropagation(); restore() }}
           className="p-1.5 rounded-full text-text-tertiary hover:text-text-primary hover:bg-surface-2 transition-colors" title="Agrandir">
-          <Maximize2 size={14} />
+          <Square size={14} />
         </button>
         <button onClick={e => { e.stopPropagation(); close() }}
           className="p-1.5 rounded-full text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors" title="Fermer">

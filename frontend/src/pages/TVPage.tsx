@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Tv, Heart, HeartOff, Plus, Search, Play, Trash2, X, Globe, Loader2, Link2, ExternalLink, Maximize2,
+  Tv, Heart, HeartOff, Plus, Search, Play, Trash2, X, Globe, Loader2, Link2, ExternalLink, Maximize,
 } from 'lucide-react'
 import { Button, Input, ConfirmDialog, MenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
 import { useConfirm } from '@kubuno/sdk'
@@ -79,7 +79,7 @@ function LivePlayer({ channel, onClose }: { channel: TvChannel; onClose: () => v
         <div className="flex items-center gap-1">
           <button onClick={() => videoRef.current?.requestFullscreen().catch(() => {})}
             className="p-1.5 rounded-md text-white/60 hover:text-white transition-colors" title="Plein écran">
-            <Maximize2 size={15} />
+            <Maximize size={15} />
           </button>
           <button onClick={onClose} className="p-1.5 rounded-md text-white/60 hover:text-white transition-colors" title="Fermer">
             <X size={16} />
@@ -412,12 +412,12 @@ export default function TVPage() {
             {categories.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-4">
                 <button onClick={() => setCategory(null)}
-                  className={`px-2 py-1 rounded-full text-xs transition-colors ${!category ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
+                  className={`px-2 py-1 rounded-md text-xs transition-colors ${!category ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
                   Toutes catégories
                 </button>
                 {categories.slice(0, 24).map(({ category: cat, count }) => (
                   <button key={cat} onClick={() => setCategory(cat === category ? null : cat)}
-                    className={`px-2 py-1 rounded-full text-xs transition-colors ${cat === category ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
+                    className={`px-2 py-1 rounded-md text-xs transition-colors ${cat === category ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:bg-surface-3'}`}>
                     {cat} <span className="opacity-60">{count}</span>
                   </button>
                 ))}

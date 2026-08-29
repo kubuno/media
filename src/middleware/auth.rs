@@ -22,7 +22,7 @@ pub async fn require_auth(
     next: Next,
 ) -> Result<Response, StatusCode> {
     let headers = req.headers();
-    let user = extract_user_from_headers(headers);
+    let user = verify_token(headers, &state);
 
     match user {
         Some(u) => {
@@ -51,14 +51,27 @@ pub async fn require_auth(
     }
 }
 
-fn extract_user_from_headers(headers: &HeaderMap) -> Option<AuthUser> {
-    let user_id = headers.get("X-Kubuno-User-Id")?.to_str().ok()?;
-    let email   = headers.get("X-Kubuno-User-Email")?.to_str().ok()?;
-    let role    = headers.get("X-Kubuno-User-Role")?.to_str().ok()?;
+/// This module's id, used as the token audience.
+const MODULE_ID: &str = "media";
+
+/// Resolve the caller from the signed `X-Kubuno-Auth` token the core mints with
+/// this module's internal secret (see `kubuno-modauth`), instead of trusting the
+/// plain `X-Kubuno-User-*` headers, which any process reaching this module's
+/// loopback port could forge to impersonate any user. When no token is present
+/// (`None`), the caller falls back to validating a bearer token against the core
+/// (`/api/v1/me`), which stays safe.
+fn verify_token(headers: &HeaderMap, state: &AppState) -> Option<AuthUser> {
+    let token = headers.get(kubuno_modauth::TOKEN_HEADER)?.to_str().ok()?;
+    let user = kubuno_modauth::verify(
+        state.settings.core.internal_secret.as_bytes(),
+        token,
+        MODULE_ID,
+    )
+    .ok()?;
     Some(AuthUser {
-        id:    user_id.parse().ok()?,
-        email: email.to_string(),
-        role:  role.to_string(),
+        id:    user.id,
+        email: user.email,
+        role:  user.role,
     })
 }
 
