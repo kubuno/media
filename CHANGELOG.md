@@ -12,6 +12,16 @@ number at release time, and CI publishes that section as the GitHub Release note
 ### Changed
 
 
+
+- **The package maintainer address moved to the project's own domain.** The
+  Debian package's `Maintainer` field now reads
+  `Martinien OLINGA <kubuno@martinienolinga.com>`. Nothing about what the
+  package installs changes.
+
+- **Security reports now go to `security@martinienolinga.com`.** The address
+  published in `SECURITY.md` moved to the project's own domain; the previous
+  one is retired. Reporting through GitHub Security Advisories is unaffected.
+
 - **The README now opens with a logo, and the Listen section carries its own.**
   The Listen heading shows the Listen artwork used by the applications menu and
   the browser tab. Media itself has no module artwork yet, so the page opens on
