@@ -11,6 +11,12 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 ### Changed
 
+
+- **The README now opens with a logo, and the Listen section carries its own.**
+  The Listen heading shows the Listen artwork used by the applications menu and
+  the browser tab. Media itself has no module artwork yet, so the page opens on
+  the Kubuno crest as a stand-in.
+
 - **Classic window glyphs on the floating video player, music player and TV.**
   Expand is a plain square, reduce two overlapping squares, and fullscreen the
   corner icons — no more diagonal double arrows.

@@ -3,6 +3,10 @@
   SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
+<p align="center">
+  <img src=".github/logo.svg" alt="Kubuno Media logo" width="128" height="128">
+</p>
+
 # Kubuno Media
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
@@ -39,7 +43,7 @@ A module for [Kubuno](https://github.com/kubuno/core), the self-hosted, libre (A
 - **Metadata lock** — lock any item to protect curated metadata from refreshes.
 - Failed lookups are retried with backoff, and per-item refresh/dissociate is available from every detail page.
 
-### Listen — music, radio & DJ
+### <img src=".github/logo-listen.png" width="22" height="22" alt=""> Listen — music, radio & DJ
 
 - Artists, albums and tracks with rich detail views, localized biographies and cover art.
 - A full-featured player: queue, equalizer, visualizer, floating mini-player.
