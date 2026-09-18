@@ -12,27 +12,19 @@ number at release time, and CI publishes that section as the GitHub Release note
 ### Changed
 
 
-
-
-- **The RPM package now names the same maintainer as the Debian one.** Its
-  changelog entry read `Kubuno Contributors <contact@kubuno.io>`, an address on
-  a domain the project does not use; it now reads
-  `Martinien OLINGA <kubuno@martinienolinga.com>`, matching the `.deb`. Nothing
-  about what the package installs changes.
-
-- **The package maintainer address moved to the project's own domain.** The
-  Debian package's `Maintainer` field now reads
-  `Martinien OLINGA <kubuno@martinienolinga.com>`. Nothing about what the
-  package installs changes.
-
-- **Security reports now go to `security@martinienolinga.com`.** The address
-  published in `SECURITY.md` moved to the project's own domain; the previous
-  one is retired. Reporting through GitHub Security Advisories is unaffected.
-
+- **This module now installs as a Kubuno package (`.kbpkg`) only.** Its system
+  packages (Debian/RPM and the Windows and macOS installers) are no longer
+  built: the module is distributed as one `.kbpkg` per platform (Linux, Windows,
+  macOS) that the Kubuno server installs itself — from the admin console, or
+  offline with `kubuno modules:install <file>.kbpkg`.
 - **The README now opens with a logo, and the Listen section carries its own.**
   The Listen heading shows the Listen artwork used by the applications menu and
   the browser tab. Media itself has no module artwork yet, so the page opens on
   the Kubuno crest as a stand-in.
+
+- **New Listen logo** — a green hexagon with a white loudspeaker, used as the
+  browser-tab icon of `/media/listen` and in the applications menu. It
+  replaces the generic music-note icon and is raster (PNG) designer artwork.
 
 - **Classic window glyphs on the floating video player, music player and TV.**
   Expand is a plain square, reduce two overlapping squares, and fullscreen the
@@ -43,6 +35,15 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 ### Fixed
 
+- **The floating players' title bar no longer balloons on a narrow window.**
+  A long track or file name — "Parle-moi (feat. Zaho)" — used to wrap onto four
+  lines and turn the accent band into a block three times its height, because
+  the band's six action buttons leave the title only a few dozen pixels at the
+  minimum window width. The title now stays on a single line and gives way as
+  room runs out: the icon goes first, then the text is ellipsised, and it drops
+  entirely when nothing legible would fit. Applies to the music player, the
+  Drive video player and the trailer window; the name is still shown in full in
+  each window's body.
 
 - **A withdrawn dependency is no longer used.** A crate deep in the tree
   (`spin` 0.9.8, pulled in through the HTTP stack) was yanked by its authors.

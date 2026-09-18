@@ -10,6 +10,7 @@ import {
 import { FloatingWindow, RangeSlider } from '@ui'
 import { filesApi, formatSize, type FileItem } from '@kubuno/drive'
 import { useWindowZStore } from '@ui'
+import { WindowTitle } from './components/WindowTitle'
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 
@@ -386,8 +387,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
   return (
     <>
       <FloatingWindow
-        title={file.name}
-        icon={<Film size={15} className="text-blue-500" />}
+        title={<WindowTitle text={file.name} icon={<Film size={15} className="text-blue-500" />} />}
         onClose={handleClose}
         defaultWidth={720}
         defaultHeight={480}

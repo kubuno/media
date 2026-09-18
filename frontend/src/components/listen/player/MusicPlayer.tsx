@@ -15,6 +15,7 @@ import { mediaApi } from '../../../api'
 import { VisualizerPanel } from './VisualizerPanel'
 import { EqualizerPanel } from './EqualizerPanel'
 import { QueuePanel, QUEUE_DRAG_TYPE } from './QueuePanel'
+import { WindowTitle } from '../../WindowTitle'
 import type { PlayerTrack } from '../../../store/playerStore'
 
 // ── Drag-a-track-onto-the-player drop zone ────────────────────────────────────
@@ -631,8 +632,7 @@ function FullPlayer({ onMinimize, onClose }: {
 
   return (
     <FloatingWindow
-      title={currentTrack.title}
-      icon={<Music size={15} />}
+      title={<WindowTitle text={currentTrack.title} icon={<Music size={15} />} />}
       onClose={onClose}
       popout={popout}
       defaultWidth={totalWidth}

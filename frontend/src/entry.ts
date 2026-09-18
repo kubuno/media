@@ -1,11 +1,12 @@
 /** Media MODULE bundle — loaded at runtime (see vite.module.config). */
 import { lazy } from 'react'
-import { RouteRegistry, WaffleAppRegistry, SlotRegistry, ModuleSettingsRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
+import { RouteRegistry, WaffleAppRegistry, FaviconRegistry, SlotRegistry, ModuleSettingsRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
 import { registerMediaAdmin } from './admin/MediaAdminPanel'
 import { useMediaSearchStore } from './store/mediaSearchStore'
-import { Tv, Music } from 'lucide-react'
+import { Tv } from 'lucide-react'
 import './index.css'
 import './i18n'
+import ListenLogo from './ListenLogo'
 import MediaSidebarBody from './MediaSidebarBody'
 import MusicPlayer from './components/listen/player/MusicPlayer'
 import FilesAudioBridge from './FilesAudioBridge'
@@ -18,9 +19,12 @@ export const sdkVersion = SDK_VERSION
 
 export function register() {
   // Noms d'applications = marques, jamais traduits.
+  // Listen has its own logo: the tab shows it under /media/listen.
+  FaviconRegistry.register('media-listen', '/media-listen-logo.png')
+
   WaffleAppRegistry.register('media', 'Media', [
     { id: 'media-watch',  label: 'Watch',  Icon: Tv,    path: '/media/watch'  },
-    { id: 'media-listen', label: 'Listen', Icon: Music, path: '/media/listen' },
+    { id: 'media-listen', label: 'Listen', Icon: ListenLogo, path: '/media/listen' },
   ])
 
   // The header gear button opens the per-user Media settings while in /media.

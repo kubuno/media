@@ -2,6 +2,7 @@ import { Clapperboard, ExternalLink, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { FloatingWindow } from '@ui'
+import { WindowTitle } from './components/WindowTitle'
 import { useTrailerStore } from './store/trailerStore'
 import { mediaApi } from './api'
 
@@ -26,8 +27,7 @@ export default function TrailerPlayer() {
 
   return (
     <FloatingWindow
-      title={windowTitle}
-      icon={<Clapperboard className="w-4 h-4" />}
+      title={<WindowTitle text={windowTitle} icon={<Clapperboard className="w-4 h-4" />} />}
       onClose={close}
       defaultWidth={640}
       defaultHeight={410}
