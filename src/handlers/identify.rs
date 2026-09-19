@@ -40,9 +40,11 @@ fn clean_query(q: Option<String>) -> Option<String> {
 /// Reject refresh/dissociate on a locked item. `table` is compile-time
 /// constant at every call site, never user input.
 async fn ensure_unlocked(state: &AppState, table: &str, id: Uuid) -> Result<(), MediaError> {
-    let locked: Option<bool> = sqlx::query_scalar(&format!(
+    // Audited: every call site passes a literal table name (movies, tv_shows,
+    // artists, albums); the id is bound.
+    let locked: Option<bool> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT meta_locked FROM media.{table} WHERE id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(&state.db)
     .await?;
@@ -61,9 +63,10 @@ pub struct LockBody {
 }
 
 async fn set_lock(state: &AppState, table: &str, id: Uuid, locked: bool) -> Result<Json<Value>, MediaError> {
-    let updated: Option<Uuid> = sqlx::query_scalar(&format!(
+    // Audited: same — literal table names only, values bound.
+    let updated: Option<Uuid> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "UPDATE media.{table} SET meta_locked = $2 WHERE id = $1 RETURNING id"
-    ))
+    )))
     .bind(id)
     .bind(locked)
     .fetch_optional(&state.db)
