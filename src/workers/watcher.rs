@@ -218,9 +218,6 @@ fn find_parent_lib<'a>(
         if let Some((id, lt)) = path_to_lib.get(current) {
             return Some((*id, lt.as_str()));
         }
-        match current.parent() {
-            Some(p) => current = p,
-            None    => return None,
-        }
+        current = current.parent()?;
     }
 }
