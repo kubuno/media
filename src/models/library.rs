@@ -43,6 +43,7 @@ pub struct MediaLibraryFull {
     pub source_type:     String,
     pub files_folder_id: Option<Uuid>,
     pub files_owner_id:  Option<Uuid>,
+    #[sqlx(json)]
     pub shared_user_ids: Vec<Uuid>,
     pub created_at:      DateTime<Utc>,
     pub updated_at:      DateTime<Utc>,

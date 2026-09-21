@@ -1,5 +1,6 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use kubuno_db::dialect::{Assign, Unit};
+use kubuno_db::{params, DbPool, JsonVec};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -16,6 +17,72 @@ use crate::{
     },
 };
 
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+#[derive(sqlx::FromRow)]
+struct PendingMovie {
+    id:        uuid::Uuid,
+    title:     String,
+    file_path: String,
+    tmdb_id:   Option<i32>,
+}
+#[derive(sqlx::FromRow)]
+struct MovieForOmdb {
+    title:        String,
+    imdb_id:      Option<String>,
+    release_date: Option<chrono::NaiveDate>,
+}
+#[derive(sqlx::FromRow)]
+struct ShowForOmdb {
+    name:           String,
+    first_air_date: Option<chrono::NaiveDate>,
+}
+#[derive(sqlx::FromRow)]
+struct PosterUrlsRow {
+    #[sqlx(json)]
+    poster_urls: Vec<String>,
+}
+#[derive(sqlx::FromRow)]
+struct MovieMergeRow {
+    #[sqlx(json)]
+    poster_urls:          Vec<String>,
+    #[sqlx(json)]
+    genres:               Vec<String>,
+    #[sqlx(json)]
+    production_countries: Vec<String>,
+    crew_json:            serde_json::Value,
+}
+#[derive(sqlx::FromRow)]
+struct PendingShow {
+    id:        uuid::Uuid,
+    name:      String,
+    tvmaze_id: Option<i32>,
+}
+#[derive(sqlx::FromRow)]
+struct ShowTmdbRow {
+    name:           String,
+    tmdb_id:        Option<i32>,
+    first_air_date: Option<chrono::NaiveDate>,
+}
+#[derive(sqlx::FromRow)]
+struct ShowMergeRow {
+    #[sqlx(json)]
+    genres:    Vec<String>,
+    #[sqlx(json)]
+    networks:  Vec<String>,
+    cast_json: serde_json::Value,
+}
+#[derive(sqlx::FromRow)]
+struct PendingArtist {
+    id:   uuid::Uuid,
+    name: String,
+}
+#[derive(sqlx::FromRow)]
+struct PendingAlbum {
+    id:          uuid::Uuid,
+    title:       String,
+    artist_name: Option<String>,
+}
+
 fn build_http_client() -> Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
@@ -24,11 +91,11 @@ fn build_http_client() -> Result<reqwest::Client> {
 }
 
 /// Loads the language from the DB (priority) or from the config.
-pub async fn load_language(db: &PgPool, settings: &Arc<Settings>) -> String {
-    sqlx::query_scalar!(
-        "SELECT value FROM media.settings WHERE key = 'metadata_language'"
+pub async fn load_language(db: &DbPool, settings: &Arc<Settings>) -> String {
+    db.fetch_optional_scalar::<String>(
+        "SELECT value FROM media.settings WHERE setting_key = 'metadata_language'",
+        params![],
     )
-    .fetch_optional(db)
     .await
     .ok()
     .flatten()
@@ -71,11 +138,11 @@ fn cert_country(language: &str) -> String {
 }
 
 /// OMDb API key (DB setting wins over config). Empty string = disabled.
-pub async fn load_omdb_key(db: &PgPool, settings: &Arc<Settings>) -> String {
-    sqlx::query_scalar!(
-        "SELECT value FROM media.settings WHERE key = 'omdb_api_key'"
+pub async fn load_omdb_key(db: &DbPool, settings: &Arc<Settings>) -> String {
+    db.fetch_optional_scalar::<String>(
+        "SELECT value FROM media.settings WHERE setting_key = 'omdb_api_key'",
+        params![],
     )
-    .fetch_optional(db)
     .await
     .ok()
     .flatten()
@@ -88,7 +155,7 @@ pub async fn load_omdb_key(db: &PgPool, settings: &Arc<Settings>) -> String {
 /// OMDb) for an already-enriched movie or show. Looks up by stored imdb_id
 /// when present (exact), else by title/year.
 pub async fn apply_omdb_ratings(
-    db:       &PgPool,
+    db:       &DbPool,
     client:   &reqwest::Client,
     api_key:  &str,
     id:       uuid::Uuid,
@@ -97,26 +164,28 @@ pub async fn apply_omdb_ratings(
     if api_key.is_empty() {
         return;
     }
+    // The year used to be `EXTRACT(YEAR FROM ...)::int`, which isn't portable
+    // (no EXTRACT on SQLite): read the date and take the year in Rust instead.
     let (title, year, imdb_id) = if is_movie {
-        match sqlx::query!(
-            "SELECT title, imdb_id, EXTRACT(YEAR FROM release_date)::int AS year FROM media.movies WHERE id = $1",
-            id
-        )
-        .fetch_optional(db)
-        .await
+        match db
+            .fetch_optional_as::<MovieForOmdb>(
+                "SELECT title, imdb_id, release_date FROM media.movies WHERE id = $1",
+                params![id],
+            )
+            .await
         {
-            Ok(Some(r)) => (r.title, r.year, r.imdb_id),
+            Ok(Some(r)) => (r.title, r.release_date.map(|d| chrono::Datelike::year(&d)), r.imdb_id),
             _ => return,
         }
     } else {
-        match sqlx::query!(
-            "SELECT name AS title, NULL::varchar AS imdb_id, EXTRACT(YEAR FROM first_air_date)::int AS year FROM media.tv_shows WHERE id = $1",
-            id
-        )
-        .fetch_optional(db)
-        .await
+        match db
+            .fetch_optional_as::<ShowForOmdb>(
+                "SELECT name, first_air_date FROM media.tv_shows WHERE id = $1",
+                params![id],
+            )
+            .await
         {
-            Ok(Some(r)) => (r.title, r.year, r.imdb_id),
+            Ok(Some(r)) => (r.name, r.first_air_date.map(|d| chrono::Datelike::year(&d)), None),
             _ => return,
         }
     };
@@ -133,28 +202,39 @@ pub async fn apply_omdb_ratings(
     // Persist ratings + the IMDb poster as an extra artwork candidate
     // (never overriding an existing poster, only filling gaps).
     let result = if is_movie {
-        sqlx::query!(
+        // poster_urls is a JSON array now (was TEXT[]): read the current value,
+        // append the new poster when present and not already listed (dedup,
+        // was `array_append` + `NOT ($3 = ANY(poster_urls))`), and write the
+        // whole array back.
+        let mut poster_urls = db
+            .fetch_optional_as::<PosterUrlsRow>(
+                "SELECT poster_urls FROM media.movies WHERE id = $1",
+                params![id],
+            )
+            .await
+            .ok()
+            .flatten()
+            .map(|r| r.poster_urls)
+            .unwrap_or_default();
+        if let Some(p) = &ratings.poster {
+            if !poster_urls.contains(p) {
+                poster_urls.push(p.clone());
+            }
+        }
+        db.execute(
             r#"UPDATE media.movies
                SET ratings_json = $2,
                    poster_path  = COALESCE(poster_path, $3),
-                   poster_urls  = CASE WHEN $3::text IS NOT NULL AND NOT ($3 = ANY(poster_urls))
-                                       THEN array_append(poster_urls, $3)
-                                       ELSE poster_urls END
+                   poster_urls  = $4
                WHERE id = $1"#,
-            id,
-            ratings.to_json(),
-            ratings.poster,
+            params![id, ratings.to_json(), ratings.poster.clone(), poster_urls],
         )
-        .execute(db)
         .await
     } else {
-        sqlx::query!(
+        db.execute(
             "UPDATE media.tv_shows SET ratings_json = $2, poster_path = COALESCE(poster_path, $3) WHERE id = $1",
-            id,
-            ratings.to_json(),
-            ratings.poster,
+            params![id, ratings.to_json(), ratings.poster.clone()],
         )
-        .execute(db)
         .await
     };
     if let Err(e) = result {
@@ -168,21 +248,22 @@ pub async fn apply_omdb_ratings(
 /// primary movie/show provider. The DB setting
 /// `tmdb_api_key` overrides the config file.
 pub async fn load_tmdb_service(
-    db:       &PgPool,
+    db:       &DbPool,
     settings: &Arc<Settings>,
     client:   &reqwest::Client,
     language: &str,
 ) -> Option<TmdbService> {
-    let key = sqlx::query_scalar!(
-        "SELECT value FROM media.settings WHERE key = 'tmdb_api_key'"
-    )
-    .fetch_optional(db)
-    .await
-    .ok()
-    .flatten()
-    .map(|k| k.trim().to_string())
-    .filter(|k| !k.is_empty())
-    .unwrap_or_else(|| settings.metadata.tmdb_api_key.trim().to_string());
+    let key = db
+        .fetch_optional_scalar::<String>(
+            "SELECT value FROM media.settings WHERE setting_key = 'tmdb_api_key'",
+            params![],
+        )
+        .await
+        .ok()
+        .flatten()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+        .unwrap_or_else(|| settings.metadata.tmdb_api_key.trim().to_string());
 
     if key.is_empty() {
         return None;
@@ -196,10 +277,10 @@ pub async fn load_tmdb_service(
     ))
 }
 
-/// Démarre les workers d'enrichissement metadata en arrière-plan.
+/// Starts the metadata enrichment workers in the background.
 /// Failed items are retried up to 3 times (with a 1h cool-down) — see the
 /// `retryable` predicate in each poller.
-pub async fn start(db: PgPool, settings: Arc<Settings>) {
+pub async fn start(db: DbPool, settings: Arc<Settings>) {
     let db_movies = db.clone();
     let s_movies  = settings.clone();
     tokio::spawn(async move {
@@ -247,32 +328,35 @@ pub async fn start(db: PgPool, settings: Arc<Settings>) {
 
 // ── Movies ────────────────────────────────────────────────────────────────────
 
-pub async fn enrich_pending(db: &PgPool, settings: &Arc<Settings>) -> Result<usize> {
+pub async fn enrich_pending(db: &DbPool, settings: &Arc<Settings>) -> Result<usize> {
     let language = load_language(db, settings).await;
     let client   = build_http_client()?;
     let tmdb_api = load_tmdb_service(db, settings, &client, &language).await;
     let omdb_key = load_omdb_key(db, settings).await;
 
-    let movies = sqlx::query!(
-        r#"SELECT id, title, file_path, tmdb_id FROM media.movies
-           WHERE NOT meta_locked
-             AND (meta_status = 'pending_meta'
-                  OR (meta_status = 'error_meta' AND meta_retries < 3
-                      AND updated_at < NOW() - INTERVAL '1 hour'))
-           ORDER BY created_at DESC
-           LIMIT 20"#
-    )
-    .fetch_all(db)
-    .await?;
+    let movies = db
+        .fetch_all_as::<PendingMovie>(
+            &format!(
+                r#"SELECT id, title, file_path, tmdb_id FROM media.movies
+                   WHERE NOT meta_locked
+                     AND (meta_status = 'pending_meta'
+                          OR (meta_status = 'error_meta' AND meta_retries < 3
+                              AND updated_at < {}))
+                   ORDER BY created_at DESC
+                   LIMIT 20"#,
+                db.backend().interval_before(1, Unit::Hour)
+            ),
+            params![],
+        )
+        .await?;
 
     let count = movies.len();
 
     for movie in movies {
-        sqlx::query!(
+        db.execute(
             "UPDATE media.movies SET meta_status = 'fetching' WHERE id = $1",
-            movie.id
+            params![movie.id],
         )
-        .execute(db)
         .await?;
 
         let filename = std::path::Path::new(&movie.file_path)
@@ -305,11 +389,10 @@ pub async fn enrich_pending(db: &PgPool, settings: &Arc<Settings>) -> Result<usi
             }
             Err(e) => {
                 tracing::warn!(error = %e, title = %search_title, "Enrichissement film échoué, marqué error_meta");
-                sqlx::query!(
+                db.execute(
                     "UPDATE media.movies SET meta_status = 'error_meta', meta_retries = meta_retries + 1 WHERE id = $1",
-                    movie.id
+                    params![movie.id],
                 )
-                .execute(db)
                 .await?;
             }
         }
@@ -324,7 +407,7 @@ pub async fn enrich_pending(db: &PgPool, settings: &Arc<Settings>) -> Result<usi
 /// with photos, crew, tagline, runtime, trailer, certification, imdb_id).
 /// Re-matches by stored `tmdb_id` when available, else searches by title.
 pub async fn enrich_movie_api(
-    db:          &PgPool,
+    db:          &DbPool,
     svc:         &TmdbService,
     id:          uuid::Uuid,
     title:       &str,
@@ -390,7 +473,40 @@ pub async fn enrich_movie_api(
     let trailer_key    = movie.trailer_key();
     let content_rating = movie.certification(&cert_country(language));
 
-    sqlx::query!(
+    // Merge poster_urls / genres / production_countries / crew_json against
+    // the row's current value: an empty provider result keeps the existing
+    // value (was `CASE WHEN cardinality(...) > 0`/`jsonb_array_length(...) > 0`
+    // in SQL, not portable), and a fresh poster is prepended to the array when
+    // not already listed (was `array_prepend`, deduplicated).
+    let current = db
+        .fetch_optional_as::<MovieMergeRow>(
+            "SELECT poster_urls, genres, production_countries, crew_json FROM media.movies WHERE id = $1",
+            params![id],
+        )
+        .await?;
+    let mut poster_urls = current.as_ref().map(|r| r.poster_urls.clone()).unwrap_or_default();
+    if let Some(p) = &poster {
+        if !poster_urls.contains(p) {
+            poster_urls.insert(0, p.clone());
+        }
+    }
+    let genres_final = if genres.is_empty() {
+        current.as_ref().map(|r| r.genres.clone()).unwrap_or_default()
+    } else {
+        genres
+    };
+    let countries_final = if countries.is_empty() {
+        current.as_ref().map(|r| r.production_countries.clone()).unwrap_or_default()
+    } else {
+        countries
+    };
+    let crew_final = if crew_json.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+        crew_json
+    } else {
+        current.as_ref().map(|r| r.crew_json.clone()).unwrap_or_else(|| serde_json::Value::Array(vec![]))
+    };
+
+    db.execute(
         r#"UPDATE media.movies
            SET title                = $2,
                original_title       = $3,
@@ -400,46 +516,47 @@ pub async fn enrich_movie_api(
                runtime_mins         = COALESCE($7, runtime_mins),
                poster_path          = COALESCE($8, poster_path),
                backdrop_path        = COALESCE($9, backdrop_path),
-               vote_average         = COALESCE(CAST($10::float8 AS numeric(3,1)), vote_average),
+               vote_average         = COALESCE($10, vote_average),
                vote_count           = COALESCE($11, vote_count),
-               popularity           = COALESCE(CAST($12::float8 AS numeric(10,3)), popularity),
-               genres               = CASE WHEN cardinality($13::text[]) > 0 THEN $13 ELSE genres END,
+               popularity           = COALESCE($12, popularity),
+               genres               = $13,
                original_language    = COALESCE($14, original_language),
-               production_countries = CASE WHEN cardinality($15::text[]) > 0 THEN $15 ELSE production_countries END,
+               production_countries = $15,
                imdb_id              = COALESCE($16, imdb_id),
                cast_json            = $17,
-               crew_json            = CASE WHEN jsonb_array_length($18) > 0 THEN $18 ELSE crew_json END,
+               crew_json            = $18,
                trailer_key          = COALESCE($19, trailer_key),
                content_rating       = COALESCE($20, content_rating),
                tmdb_id              = $21,
-               poster_urls          = CASE WHEN $8::text IS NOT NULL AND NOT ($8 = ANY(poster_urls)) THEN array_prepend($8, poster_urls) ELSE poster_urls END,
+               poster_urls          = $22,
                meta_status          = 'ready',
-               meta_retries         = 0,
-               updated_at           = NOW()
+               meta_retries         = 0
            WHERE id = $1"#,
-        id,
-        movie.title,
-        movie.original_title,
-        movie.overview.unwrap_or_default(),
-        movie.tagline.unwrap_or_default(),
-        release_date,
-        movie.runtime,
-        poster,
-        backdrop,
-        movie.vote_average,
-        movie.vote_count,
-        movie.popularity,
-        &genres,
-        movie.original_language,
-        &countries,
-        movie.imdb_id,
-        cast_json,
-        crew_json,
-        trailer_key,
-        content_rating,
-        movie.id,
+        params![
+            id,
+            movie.title,
+            movie.original_title,
+            movie.overview.unwrap_or_default(),
+            movie.tagline.unwrap_or_default(),
+            release_date,
+            movie.runtime,
+            poster,
+            backdrop,
+            movie.vote_average,
+            movie.vote_count,
+            movie.popularity,
+            genres_final,
+            movie.original_language,
+            countries_final,
+            movie.imdb_id,
+            cast_json,
+            crew_final,
+            trailer_key,
+            content_rating,
+            movie.id,
+            poster_urls,
+        ],
     )
-    .execute(db)
     .await?;
 
     Ok(())
@@ -450,7 +567,7 @@ pub async fn enrich_movie_api(
 /// Either provider alone is enough — we only fail when both come up empty.
 #[allow(clippy::too_many_arguments)]
 async fn enrich_movie(
-    db:          &PgPool,
+    db:          &DbPool,
     client:      &reqwest::Client,
     wikidata:    &WikidataService,
     id:          uuid::Uuid,
@@ -540,39 +657,55 @@ async fn enrich_movie(
     }
     let main_poster = tmdb_poster.or_else(|| wiki.as_ref().and_then(|w| w.poster_url.clone()));
 
-    sqlx::query!(
+    // Keep the existing genres when Wikidata returned none (was
+    // `CASE WHEN cardinality(...) > 0 THEN ... ELSE genres END`).
+    let genres_final: Vec<String> = if genres.is_empty() {
+        db.fetch_optional_scalar::<JsonVec<String>>(
+            "SELECT genres FROM media.movies WHERE id = $1",
+            params![id],
+        )
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.0)
+        .unwrap_or_default()
+    } else {
+        genres
+    };
+
+    db.execute(
         r#"UPDATE media.movies
            SET title          = COALESCE($2, title),
                overview       = COALESCE($3, overview),
                poster_path    = COALESCE($4, poster_path),
-               genres         = CASE WHEN cardinality($5::text[]) > 0 THEN $5 ELSE genres END,
+               genres         = $5,
                release_date   = COALESCE($6, release_date),
                content_rating = COALESCE($7, content_rating),
                poster_urls    = $8,
                crew_json      = $9,
                tmdb_id        = COALESCE($10, tmdb_id),
                backdrop_path  = COALESCE($11, backdrop_path),
-               vote_average   = COALESCE(CAST($12::float8 AS numeric(3,1)), vote_average),
+               vote_average   = COALESCE($12, vote_average),
                vote_count     = COALESCE($13, vote_count),
                meta_status    = 'ready',
-               meta_retries   = 0,
-               updated_at     = NOW()
+               meta_retries   = 0
            WHERE id = $1"#,
-        id,
-        final_title,
-        overview,
-        main_poster,
-        &genres,
-        release_date,
-        extras.content_rating,
-        &all_posters,
-        crew_json,
-        candidate.as_ref().and_then(|c| c.tmdb_id.map(|t| t as i32)),
-        candidate.as_ref().and_then(|c| c.backdrop_url.clone()),
-        candidate.as_ref().and_then(|c| c.vote_average),
-        candidate.as_ref().and_then(|c| c.vote_count.map(|v| v as i32)),
+        params![
+            id,
+            final_title,
+            overview,
+            main_poster,
+            genres_final,
+            release_date,
+            extras.content_rating,
+            all_posters,
+            crew_json,
+            candidate.as_ref().and_then(|c| c.tmdb_id.map(|t| t as i32)),
+            candidate.as_ref().and_then(|c| c.backdrop_url.clone()),
+            candidate.as_ref().and_then(|c| c.vote_average),
+            candidate.as_ref().and_then(|c| c.vote_count.map(|v| v as i32)),
+        ],
     )
-    .execute(db)
     .await?;
 
     Ok(())
@@ -581,7 +714,7 @@ async fn enrich_movie(
 /// Apply a manually chosen candidate to a movie (Identify flow), then
 /// complete crew/rating/genres from Wikidata using the canonical title.
 pub async fn apply_movie_candidate(
-    db:        &PgPool,
+    db:        &DbPool,
     settings:  &Arc<Settings>,
     id:        uuid::Uuid,
     candidate: &TmdbCandidate,
@@ -590,12 +723,10 @@ pub async fn apply_movie_candidate(
     let client   = build_http_client()?;
     let wikidata = WikidataService::new(client.clone(), language.clone());
 
-    sqlx::query!(
+    db.execute(
         "UPDATE media.movies SET tmdb_id = COALESCE($2, tmdb_id), meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
-        id,
-        candidate.tmdb_id.map(|t| t as i32),
+        params![id, candidate.tmdb_id.map(|t| t as i32)],
     )
-    .execute(db)
     .await?;
 
     // With an API key and a TMDB id, the official API gives the richest data.
@@ -624,28 +755,28 @@ pub async fn apply_movie_candidate(
         let release_date = candidate
             .year
             .and_then(|y| chrono::NaiveDate::from_ymd_opt(y, 1, 1));
-        sqlx::query!(
+        db.execute(
             r#"UPDATE media.movies
                SET title         = $2,
                    overview      = COALESCE($3, overview),
                    poster_path   = COALESCE($4, poster_path),
                    backdrop_path = COALESCE($5, backdrop_path),
                    release_date  = COALESCE($6, release_date),
-                   vote_average  = COALESCE(CAST($7::float8 AS numeric(3,1)), vote_average),
+                   vote_average  = COALESCE($7, vote_average),
                    vote_count    = COALESCE($8, vote_count),
-                   meta_status   = 'ready',
-                   updated_at    = NOW()
+                   meta_status   = 'ready'
                WHERE id = $1"#,
-            id,
-            candidate.title,
-            candidate.overview,
-            candidate.poster_url,
-            candidate.backdrop_url,
-            release_date,
-            candidate.vote_average,
-            candidate.vote_count.map(|v| v as i32),
+            params![
+                id,
+                candidate.title.clone(),
+                candidate.overview.clone(),
+                candidate.poster_url.clone(),
+                candidate.backdrop_url.clone(),
+                release_date,
+                candidate.vote_average,
+                candidate.vote_count.map(|v| v as i32),
+            ],
         )
-        .execute(db)
         .await?;
     }
 
@@ -656,7 +787,7 @@ pub async fn apply_movie_candidate(
 
 // ── TV Shows ──────────────────────────────────────────────────────────────────
 
-pub async fn enrich_pending_shows(db: &PgPool, settings: &Arc<Settings>) -> Result<usize> {
+pub async fn enrich_pending_shows(db: &DbPool, settings: &Arc<Settings>) -> Result<usize> {
     let language = load_language(db, settings).await;
     let client   = build_http_client()?;
     let tvmaze = TvMazeService::new(client.clone());
@@ -664,26 +795,29 @@ pub async fn enrich_pending_shows(db: &PgPool, settings: &Arc<Settings>) -> Resu
     let tmdb_api = load_tmdb_service(db, settings, &client, &language).await;
     let omdb_key = load_omdb_key(db, settings).await;
 
-    let shows = sqlx::query!(
-        r#"SELECT id, name, tvmaze_id FROM media.tv_shows
-           WHERE NOT meta_locked
-             AND (meta_status = 'pending_meta'
-                  OR (meta_status = 'error_meta' AND meta_retries < 3
-                      AND updated_at < NOW() - INTERVAL '1 hour'))
-           ORDER BY created_at DESC
-           LIMIT 10"#
-    )
-    .fetch_all(db)
-    .await?;
+    let shows = db
+        .fetch_all_as::<PendingShow>(
+            &format!(
+                r#"SELECT id, name, tvmaze_id FROM media.tv_shows
+                   WHERE NOT meta_locked
+                     AND (meta_status = 'pending_meta'
+                          OR (meta_status = 'error_meta' AND meta_retries < 3
+                              AND updated_at < {}))
+                   ORDER BY created_at DESC
+                   LIMIT 10"#,
+                db.backend().interval_before(1, Unit::Hour)
+            ),
+            params![],
+        )
+        .await?;
 
     let count = shows.len();
 
     for show in shows {
-        sqlx::query!(
+        db.execute(
             "UPDATE media.tv_shows SET meta_status = 'fetching' WHERE id = $1",
-            show.id
+            params![show.id],
         )
-        .execute(db)
         .await?;
 
         match enrich_show_tvmaze(db, &client, &tvmaze, show.id, &show.name, show.tvmaze_id).await {
@@ -705,11 +839,10 @@ pub async fn enrich_pending_shows(db: &PgPool, settings: &Arc<Settings>) -> Resu
                     Ok(_) => tracing::info!(name = %show.name, "Metadata Wikidata série OK"),
                     Err(e2) => {
                         tracing::warn!(error = %e2, name = %show.name, "Wikidata série échoué");
-                        sqlx::query!(
+                        db.execute(
                             "UPDATE media.tv_shows SET meta_status = 'error_meta', meta_retries = meta_retries + 1 WHERE id = $1",
-                            show.id
+                            params![show.id],
                         )
-                        .execute(db)
                         .await?;
                     }
                 }
@@ -726,7 +859,7 @@ pub async fn enrich_pending_shows(db: &PgPool, settings: &Arc<Settings>) -> Resu
 /// ID directly (stable re-match); otherwise we search by name and persist the
 /// matched ID for future refreshes.
 pub async fn enrich_show_tvmaze(
-    db:      &PgPool,
+    db:      &DbPool,
     client:  &reqwest::Client,
     tvmaze:  &TvMazeService,
     show_id: uuid::Uuid,
@@ -778,7 +911,7 @@ pub async fn enrich_show_tvmaze(
         .map(|n| vec![n.name])
         .unwrap_or_default();
 
-    sqlx::query!(
+    db.execute(
         r#"UPDATE media.tv_shows
            SET name           = $2,
                overview       = $3,
@@ -789,40 +922,46 @@ pub async fn enrich_show_tvmaze(
                networks       = $8,
                tvmaze_id      = $9,
                backdrop_path  = COALESCE($10, backdrop_path),
-               vote_average   = COALESCE(CAST($11::float8 AS numeric(3,1)), vote_average),
+               vote_average   = COALESCE($11, vote_average),
                vote_count     = COALESCE($12, vote_count),
                meta_status    = 'ready',
-               meta_retries   = 0,
-               updated_at     = NOW()
+               meta_retries   = 0
            WHERE id = $1"#,
-        show_id,
-        show.name,
-        overview,
-        poster_url,
-        first_air_date,
-        show.status,
-        &show.genres,
-        &networks,
-        tvmaze_id,
-        candidate.as_ref().and_then(|c| c.backdrop_url.clone()),
-        candidate.as_ref().and_then(|c| c.vote_average),
-        candidate.as_ref().and_then(|c| c.vote_count.map(|v| v as i32)),
+        params![
+            show_id,
+            show.name,
+            overview,
+            poster_url,
+            first_air_date,
+            show.status,
+            show.genres,
+            networks,
+            tvmaze_id,
+            candidate.as_ref().and_then(|c| c.backdrop_url.clone()),
+            candidate.as_ref().and_then(|c| c.vote_average),
+            candidate.as_ref().and_then(|c| c.vote_count.map(|v| v as i32)),
+        ],
     )
-    .execute(db)
     .await?;
 
     // tmdb_id is UNIQUE on tv_shows: the same show in two libraries would
     // violate it, so persist best-effort in a separate statement.
     if let Some(tid) = candidate.as_ref().and_then(|c| c.tmdb_id.map(|t| t as i32)) {
-        let _ = sqlx::query!(
-            "UPDATE media.tv_shows SET tmdb_id = $2 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM media.tv_shows WHERE tmdb_id = $2 AND id <> $1)",
-            show_id, tid
+        let _ = db.execute(
+            "UPDATE media.tv_shows SET tmdb_id = $1 WHERE id = $2 AND NOT EXISTS (SELECT 1 FROM media.tv_shows WHERE tmdb_id = $3 AND id <> $4)",
+            params![tid, show_id, tid, show_id],
         )
-        .execute(db)
         .await;
     }
 
-    // Upsert seasons with full metadata from the /seasons endpoint
+    // Upsert seasons with full metadata from the /seasons endpoint. `id` has
+    // no default on MySQL/SQLite, so it is always minted/looked-up in Rust.
+    // `episode_count` used to be a correlated subquery on the row's own id
+    // (`SELECT COUNT(*) ... WHERE season_id = media.tv_seasons.id`), which
+    // does not translate to MySQL's `ON DUPLICATE KEY UPDATE` (the bare
+    // column name inside the subquery would resolve to `tv_episodes.id`
+    // instead of the outer row) — the count is read in Rust and bound as a
+    // plain incoming value instead.
     for sm in &seasons_meta {
         let season_air_date: Option<chrono::NaiveDate> = sm.premiere_date
             .as_deref()
@@ -835,26 +974,52 @@ pub async fn enrich_show_tvmaze(
 
         let season_overview = sm.summary.as_deref().map(tvmaze::strip_html);
 
-        sqlx::query!(
-            r#"INSERT INTO media.tv_seasons (show_id, season_number, name, overview, air_date, poster_path)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               ON CONFLICT (show_id, season_number) DO UPDATE
-               SET name          = EXCLUDED.name,
-                   overview      = EXCLUDED.overview,
-                   air_date      = EXCLUDED.air_date,
-                   poster_path   = EXCLUDED.poster_path,
-                   episode_count = (
-                       SELECT COUNT(*) FROM media.tv_episodes
-                       WHERE season_id = media.tv_seasons.id
-                   )"#,
-            show_id,
-            sm.number,
-            sm.name.as_deref().filter(|s| !s.is_empty()),
-            season_overview,
-            season_air_date,
-            season_poster,
+        let existing_season_id = db
+            .fetch_optional_scalar::<uuid::Uuid>(
+                "SELECT id FROM media.tv_seasons WHERE show_id = $1 AND season_number = $2",
+                params![show_id, sm.number],
+            )
+            .await?;
+        let season_id = existing_season_id.unwrap_or_else(kubuno_db::new_id);
+        let episode_count: i64 = db
+            .fetch_scalar::<i64>(
+                &format!(
+                    "SELECT {} FROM media.tv_episodes WHERE season_id = $1",
+                    db.backend().count_bigint("*")
+                ),
+                params![season_id],
+            )
+            .await
+            .unwrap_or(0);
+
+        let clause = db.backend().upsert(
+            "media.tv_seasons",
+            &["show_id", "season_number"],
+            &[
+                Assign::Incoming("name"),
+                Assign::Incoming("overview"),
+                Assign::Incoming("air_date"),
+                Assign::Incoming("poster_path"),
+                Assign::Incoming("episode_count"),
+            ],
+        );
+        let sql = format!(
+            "INSERT INTO media.tv_seasons (id, show_id, season_number, name, overview, air_date, poster_path, episode_count) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8){clause}"
+        );
+        db.execute(
+            &sql,
+            params![
+                season_id,
+                show_id,
+                sm.number,
+                sm.name.as_deref().filter(|s| !s.is_empty()),
+                season_overview,
+                season_air_date,
+                season_poster,
+                episode_count,
+            ],
         )
-        .execute(db)
         .await?;
     }
 
@@ -868,15 +1033,13 @@ pub async fn enrich_show_tvmaze(
                 .into_iter()
                 .collect();
             for sn in season_numbers {
-                sqlx::query!(
-                    r#"INSERT INTO media.tv_seasons (show_id, season_number)
-                       VALUES ($1, $2)
-                       ON CONFLICT (show_id, season_number) DO NOTHING"#,
-                    show_id,
-                    sn,
-                )
-                .execute(db)
-                .await?;
+                let id = kubuno_db::new_id();
+                let sql = format!(
+                    "INSERT {}INTO media.tv_seasons (id, show_id, season_number) VALUES ($1, $2, $3){}",
+                    db.backend().insert_ignore_prefix(),
+                    db.backend().on_conflict_do_nothing(&["show_id", "season_number"]),
+                );
+                db.execute(&sql, params![id, show_id, sn]).await?;
             }
         }
     }
@@ -897,42 +1060,42 @@ pub async fn enrich_show_tvmaze(
 
             let ep_overview = ep.summary.as_deref().map(tvmaze::strip_html);
 
-            sqlx::query!(
+            db.execute(
                 r#"UPDATE media.tv_episodes
-                   SET name        = COALESCE($4, name),
-                       air_date    = $5,
-                       still_path  = $6,
-                       overview    = $7,
-                       meta_status = 'ready',
-                       updated_at  = NOW()
-                   WHERE show_id = $1
-                     AND episode_number = $2
+                   SET name        = COALESCE($1, name),
+                       air_date    = $2,
+                       still_path  = $3,
+                       overview    = $4,
+                       meta_status = 'ready'
+                   WHERE show_id = $5
+                     AND episode_number = $6
                      AND season_id IN (
                          SELECT id FROM media.tv_seasons
-                         WHERE show_id = $1 AND season_number = $3
+                         WHERE show_id = $7 AND season_number = $8
                      )"#,
-                show_id,
-                ep_num,
-                ep.season,
-                ep.name,
-                air_date,
-                still_url,
-                ep_overview,
+                params![
+                    ep.name.clone(),
+                    air_date,
+                    still_url,
+                    ep_overview,
+                    show_id,
+                    ep_num,
+                    show_id,
+                    ep.season,
+                ],
             )
-            .execute(db)
             .await?;
         }
     }
 
     // Refresh counts
-    sqlx::query!(
+    db.execute(
         r#"UPDATE media.tv_shows
            SET season_count  = (SELECT COUNT(*) FROM media.tv_seasons WHERE show_id = $1),
-               episode_count = (SELECT COUNT(*) FROM media.tv_episodes WHERE show_id = $1)
-           WHERE id = $1"#,
-        show_id,
+               episode_count = (SELECT COUNT(*) FROM media.tv_episodes WHERE show_id = $2)
+           WHERE id = $3"#,
+        params![show_id, show_id, show_id],
     )
-    .execute(db)
     .await?;
 
     Ok(())
@@ -942,16 +1105,16 @@ pub async fn enrich_show_tvmaze(
 /// overview, genres, networks, votes, artwork, and the cast with photos.
 /// Matches by the stored tmdb_id when present, else searches by name.
 async fn overlay_show_tmdb(
-    db:      &PgPool,
+    db:      &DbPool,
     svc:     &TmdbService,
     show_id: uuid::Uuid,
 ) -> Result<()> {
-    let row = sqlx::query!(
-        "SELECT name, tmdb_id, first_air_date FROM media.tv_shows WHERE id = $1",
-        show_id
-    )
-    .fetch_one(db)
-    .await?;
+    let row = db
+        .fetch_one_as::<ShowTmdbRow>(
+            "SELECT name, tmdb_id, first_air_date FROM media.tv_shows WHERE id = $1",
+            params![show_id],
+        )
+        .await?;
 
     let tmdb_id = match row.tmdb_id {
         Some(t) => t,
@@ -993,46 +1156,69 @@ async fn overlay_show_tmdb(
         })
         .unwrap_or_else(|| serde_json::Value::Array(vec![]));
 
-    sqlx::query!(
+    // Keep the existing genres/networks/cast when TMDB returned none (was
+    // `CASE WHEN cardinality(...) > 0`/`jsonb_array_length(...) > 0` in SQL).
+    let current = db
+        .fetch_optional_as::<ShowMergeRow>(
+            "SELECT genres, networks, cast_json FROM media.tv_shows WHERE id = $1",
+            params![show_id],
+        )
+        .await?;
+    let genres_final = if genres.is_empty() {
+        current.as_ref().map(|r| r.genres.clone()).unwrap_or_default()
+    } else {
+        genres
+    };
+    let networks_final = if networks.is_empty() {
+        current.as_ref().map(|r| r.networks.clone()).unwrap_or_default()
+    } else {
+        networks
+    };
+    let cast_final = if cast_json.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+        cast_json
+    } else {
+        current.as_ref().map(|r| r.cast_json.clone()).unwrap_or_else(|| serde_json::Value::Array(vec![]))
+    };
+
+    db.execute(
         r#"UPDATE media.tv_shows
            SET name          = $2,
                overview      = COALESCE(NULLIF($3, ''), overview),
                poster_path   = COALESCE($4, poster_path),
                backdrop_path = COALESCE($5, backdrop_path),
-               vote_average  = COALESCE(CAST($6::float8 AS numeric(3,1)), vote_average),
+               vote_average  = COALESCE($6, vote_average),
                vote_count    = COALESCE($7, vote_count),
-               genres        = CASE WHEN cardinality($8::text[]) > 0 THEN $8 ELSE genres END,
-               networks      = CASE WHEN cardinality($9::text[]) > 0 THEN $9 ELSE networks END,
-               cast_json     = CASE WHEN jsonb_array_length($10) > 0 THEN $10 ELSE cast_json END,
-               updated_at    = NOW()
+               genres        = $8,
+               networks      = $9,
+               cast_json     = $10
            WHERE id = $1"#,
-        show_id,
-        show.name,
-        show.overview.unwrap_or_default(),
-        poster,
-        backdrop,
-        show.vote_average,
-        show.vote_count,
-        &genres,
-        &networks,
-        cast_json,
+        params![
+            show_id,
+            show.name,
+            show.overview.unwrap_or_default(),
+            poster,
+            backdrop,
+            show.vote_average,
+            show.vote_count,
+            genres_final,
+            networks_final,
+            cast_final,
+        ],
     )
-    .execute(db)
     .await?;
 
     // tmdb_id is UNIQUE — best-effort separate statement.
-    let _ = sqlx::query!(
-        "UPDATE media.tv_shows SET tmdb_id = $2 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM media.tv_shows WHERE tmdb_id = $2 AND id <> $1)",
-        show_id, show.id
+    let _ = db.execute(
+        "UPDATE media.tv_shows SET tmdb_id = $1 WHERE id = $2 AND NOT EXISTS (SELECT 1 FROM media.tv_shows WHERE tmdb_id = $3 AND id <> $4)",
+        params![show.id, show_id, show.id, show_id],
     )
-    .execute(db)
     .await;
 
     Ok(())
 }
 
 async fn enrich_show_wikidata(
-    db:       &PgPool,
+    db:       &DbPool,
     client:   &reqwest::Client,
     wikidata: &WikidataService,
     show_id:  uuid::Uuid,
@@ -1053,7 +1239,7 @@ async fn enrich_show_wikidata(
         .and_then(|c| c.poster_url.clone())
         .or_else(|| result.poster_url.clone());
 
-    sqlx::query!(
+    db.execute(
         r#"UPDATE media.tv_shows
            SET name          = COALESCE($2, name),
                overview      = $3,
@@ -1061,23 +1247,23 @@ async fn enrich_show_wikidata(
                genres        = $5,
                networks      = $6,
                backdrop_path = COALESCE($7, backdrop_path),
-               vote_average  = COALESCE(CAST($8::float8 AS numeric(3,1)), vote_average),
+               vote_average  = COALESCE($8, vote_average),
                vote_count    = COALESCE($9, vote_count),
                meta_status   = 'ready',
-               meta_retries  = 0,
-               updated_at    = NOW()
+               meta_retries  = 0
            WHERE id = $1"#,
-        show_id,
-        result.title,
-        result.overview,
-        poster,
-        &result.genres,
-        &result.networks,
-        candidate.as_ref().and_then(|c| c.backdrop_url.clone()),
-        candidate.as_ref().and_then(|c| c.vote_average),
-        candidate.as_ref().and_then(|c| c.vote_count.map(|v| v as i32)),
+        params![
+            show_id,
+            result.title,
+            result.overview,
+            poster,
+            result.genres,
+            result.networks,
+            candidate.as_ref().and_then(|c| c.backdrop_url.clone()),
+            candidate.as_ref().and_then(|c| c.vote_average),
+            candidate.as_ref().and_then(|c| c.vote_count.map(|v| v as i32)),
+        ],
     )
-    .execute(db)
     .await?;
 
     Ok(())
@@ -1085,44 +1271,46 @@ async fn enrich_show_wikidata(
 
 // ── Music: artists ────────────────────────────────────────────────────────────
 
-pub async fn enrich_pending_artists(db: &PgPool, settings: &Arc<Settings>) -> Result<usize> {
+pub async fn enrich_pending_artists(db: &DbPool, settings: &Arc<Settings>) -> Result<usize> {
     let language = load_language(db, settings).await;
     let client   = build_http_client()?;
     let mb       = MusicBrainzService::from_settings(client.clone(), &settings.metadata);
     let wikidata = WikidataService::new(client, language.clone());
 
-    let artists = sqlx::query!(
-        r#"SELECT id, name FROM media.artists
-           WHERE NOT meta_locked
-             AND (meta_status = 'pending_meta'
-                  OR (meta_status = 'error_meta' AND meta_retries < 3
-                      AND updated_at < NOW() - INTERVAL '1 hour'))
-             AND name <> ''
-           ORDER BY created_at DESC
-           LIMIT 10"#
-    )
-    .fetch_all(db)
-    .await?;
+    let artists = db
+        .fetch_all_as::<PendingArtist>(
+            &format!(
+                r#"SELECT id, name FROM media.artists
+                   WHERE NOT meta_locked
+                     AND (meta_status = 'pending_meta'
+                          OR (meta_status = 'error_meta' AND meta_retries < 3
+                              AND updated_at < {}))
+                     AND name <> ''
+                   ORDER BY created_at DESC
+                   LIMIT 10"#,
+                db.backend().interval_before(1, Unit::Hour)
+            ),
+            params![],
+        )
+        .await?;
 
     let count = artists.len();
 
     for artist in artists {
-        sqlx::query!(
+        db.execute(
             "UPDATE media.artists SET meta_status = 'fetching' WHERE id = $1",
-            artist.id
+            params![artist.id],
         )
-        .execute(db)
         .await?;
 
         match enrich_artist_mb(db, &mb, &wikidata, artist.id, &artist.name, None, &language).await {
             Ok(_) => tracing::info!(name = %artist.name, "Metadata artiste (MusicBrainz) OK"),
             Err(e) => {
                 tracing::warn!(error = %e, name = %artist.name, "Enrichissement artiste échoué");
-                sqlx::query!(
+                db.execute(
                     "UPDATE media.artists SET meta_status = 'error_meta', meta_retries = meta_retries + 1 WHERE id = $1",
-                    artist.id
+                    params![artist.id],
                 )
-                .execute(db)
                 .await?;
             }
         }
@@ -1136,7 +1324,7 @@ pub async fn enrich_pending_artists(db: &PgPool, settings: &Arc<Settings>) -> Re
 /// fallback. `forced_mbid` comes from the Identify flow.
 #[allow(clippy::too_many_arguments)]
 pub async fn enrich_artist_mb(
-    db:          &PgPool,
+    db:          &DbPool,
     mb:          &MusicBrainzService,
     wikidata:    &WikidataService,
     id:          uuid::Uuid,
@@ -1182,7 +1370,23 @@ pub async fn enrich_artist_mb(
     let end_date   = detail.life_span.as_ref().and_then(|l| l.end.as_deref()).and_then(parse_partial_date);
     let genres = detail.top_genres(5);
 
-    sqlx::query!(
+    // Keep the existing genres when MusicBrainz returned none (was
+    // `CASE WHEN cardinality(...) > 0 THEN ... ELSE genres END`).
+    let genres_final: Vec<String> = if genres.is_empty() {
+        db.fetch_optional_scalar::<JsonVec<String>>(
+            "SELECT genres FROM media.artists WHERE id = $1",
+            params![id],
+        )
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.0)
+        .unwrap_or_default()
+    } else {
+        genres
+    };
+
+    db.execute(
         r#"UPDATE media.artists
            SET name        = $2,
                sort_name   = COALESCE($3, sort_name),
@@ -1190,34 +1394,33 @@ pub async fn enrich_artist_mb(
                country     = COALESCE($5, country),
                begin_date  = COALESCE($6, begin_date),
                end_date    = COALESCE($7, end_date),
-               genres      = CASE WHEN cardinality($8::text[]) > 0 THEN $8 ELSE genres END,
+               genres      = $8,
                biography   = COALESCE($9, biography),
                image_path  = COALESCE($10, image_path),
                meta_status = 'ready',
-               meta_retries = 0,
-               updated_at  = NOW()
+               meta_retries = 0
            WHERE id = $1"#,
-        id,
-        detail.name,
-        detail.sort_name,
-        detail.artist_type,
-        detail.country,
-        begin_date,
-        end_date,
-        &genres,
-        biography,
-        image,
+        params![
+            id,
+            detail.name,
+            detail.sort_name,
+            detail.artist_type,
+            detail.country,
+            begin_date,
+            end_date,
+            genres_final,
+            biography,
+            image,
+        ],
     )
-    .execute(db)
     .await?;
 
     // mbid is UNIQUE: the same artist in two libraries would violate it,
     // so persist best-effort in a separate statement.
-    let _ = sqlx::query!(
-        "UPDATE media.artists SET mbid = $2 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM media.artists WHERE mbid = $2 AND id <> $1)",
-        id, mbid
+    let _ = db.execute(
+        "UPDATE media.artists SET mbid = $1 WHERE id = $2 AND NOT EXISTS (SELECT 1 FROM media.artists WHERE mbid = $3 AND id <> $4)",
+        params![mbid.clone(), id, mbid, id],
     )
-    .execute(db)
     .await;
 
     Ok(())
@@ -1225,44 +1428,46 @@ pub async fn enrich_artist_mb(
 
 // ── Music: albums ─────────────────────────────────────────────────────────────
 
-pub async fn enrich_pending_albums(db: &PgPool, settings: &Arc<Settings>) -> Result<usize> {
+pub async fn enrich_pending_albums(db: &DbPool, settings: &Arc<Settings>) -> Result<usize> {
     let client = build_http_client()?;
     let mb     = MusicBrainzService::from_settings(client, &settings.metadata);
 
-    let albums = sqlx::query!(
-        r#"SELECT a.id, a.title, ar.name AS "artist_name?"
-           FROM media.albums a
-           LEFT JOIN media.artists ar ON ar.id = a.artist_id
-           WHERE NOT a.meta_locked
-             AND (a.meta_status = 'pending_meta'
-                  OR (a.meta_status = 'error_meta' AND a.meta_retries < 3
-                      AND a.updated_at < NOW() - INTERVAL '1 hour'))
-             AND a.title <> ''
-           ORDER BY a.created_at DESC
-           LIMIT 10"#
-    )
-    .fetch_all(db)
-    .await?;
+    let albums = db
+        .fetch_all_as::<PendingAlbum>(
+            &format!(
+                r#"SELECT a.id, a.title, ar.name AS artist_name
+                   FROM media.albums a
+                   LEFT JOIN media.artists ar ON ar.id = a.artist_id
+                   WHERE NOT a.meta_locked
+                     AND (a.meta_status = 'pending_meta'
+                          OR (a.meta_status = 'error_meta' AND a.meta_retries < 3
+                              AND a.updated_at < {}))
+                     AND a.title <> ''
+                   ORDER BY a.created_at DESC
+                   LIMIT 10"#,
+                db.backend().interval_before(1, Unit::Hour)
+            ),
+            params![],
+        )
+        .await?;
 
     let count = albums.len();
 
     for album in albums {
-        sqlx::query!(
+        db.execute(
             "UPDATE media.albums SET meta_status = 'fetching' WHERE id = $1",
-            album.id
+            params![album.id],
         )
-        .execute(db)
         .await?;
 
         match enrich_album_mb(db, &mb, album.id, &album.title, album.artist_name.as_deref(), None).await {
             Ok(_) => tracing::info!(title = %album.title, "Metadata album (MusicBrainz) OK"),
             Err(e) => {
                 tracing::warn!(error = %e, title = %album.title, "Enrichissement album échoué");
-                sqlx::query!(
+                db.execute(
                     "UPDATE media.albums SET meta_status = 'error_meta', meta_retries = meta_retries + 1 WHERE id = $1",
-                    album.id
+                    params![album.id],
                 )
-                .execute(db)
                 .await?;
             }
         }
@@ -1274,7 +1479,7 @@ pub async fn enrich_pending_albums(db: &PgPool, settings: &Arc<Settings>) -> Res
 /// Enrich one album from a MusicBrainz release-group (+ Cover Art Archive
 /// front cover). `forced_rgid` comes from the Identify flow.
 pub async fn enrich_album_mb(
-    db:          &PgPool,
+    db:          &DbPool,
     mb:          &MusicBrainzService,
     id:          uuid::Uuid,
     title:       &str,
@@ -1303,36 +1508,51 @@ pub async fn enrich_album_mb(
         .and_then(parse_partial_date);
     let genres = rg.top_genres(5);
 
-    sqlx::query!(
+    // Keep the existing genres when MusicBrainz returned none (was
+    // `CASE WHEN cardinality(...) > 0 THEN ... ELSE genres END`).
+    let genres_final: Vec<String> = if genres.is_empty() {
+        db.fetch_optional_scalar::<JsonVec<String>>(
+            "SELECT genres FROM media.albums WHERE id = $1",
+            params![id],
+        )
+        .await
+        .ok()
+        .flatten()
+        .map(|v| v.0)
+        .unwrap_or_default()
+    } else {
+        genres
+    };
+
+    db.execute(
         r#"UPDATE media.albums
            SET title        = $2,
                release_year = COALESCE($3, release_year),
                release_date = COALESCE($4, release_date),
                album_type   = COALESCE($5, album_type),
-               genres       = CASE WHEN cardinality($6::text[]) > 0 THEN $6 ELSE genres END,
+               genres       = $6,
                -- Local artwork (module-served path) always beats remote covers.
                cover_path   = CASE WHEN cover_path LIKE '/api/%' THEN cover_path
                                    ELSE COALESCE($7, cover_path) END,
                meta_status  = 'ready',
-               meta_retries = 0,
-               updated_at   = NOW()
+               meta_retries = 0
            WHERE id = $1"#,
-        id,
-        rg.title,
-        release_year,
-        release_date,
-        rg.primary_type,
-        &genres,
-        cover,
+        params![
+            id,
+            rg.title,
+            release_year,
+            release_date,
+            rg.primary_type,
+            genres_final,
+            cover,
+        ],
     )
-    .execute(db)
     .await?;
 
-    let _ = sqlx::query!(
-        "UPDATE media.albums SET mbid = $2 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM media.albums WHERE mbid = $2 AND id <> $1)",
-        id, rg.id
+    let _ = db.execute(
+        "UPDATE media.albums SET mbid = $1 WHERE id = $2 AND NOT EXISTS (SELECT 1 FROM media.albums WHERE mbid = $3 AND id <> $4)",
+        params![rg.id.clone(), id, rg.id, id],
     )
-    .execute(db)
     .await;
 
     Ok(())

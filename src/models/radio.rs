@@ -12,6 +12,7 @@ pub struct RadioStation {
     pub stream_url:  String,
     pub homepage:    Option<String>,
     pub favicon:     Option<String>,
+    #[sqlx(json)]
     pub tags:        Vec<String>,
     pub country:     Option<String>,
     pub language:    Option<String>,

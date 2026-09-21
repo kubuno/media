@@ -12,6 +12,7 @@ pub struct Artist {
     pub sort_name:   Option<String>,
     pub biography:   Option<String>,
     pub image_path:  Option<String>,
+    #[sqlx(json)]
     pub genres:      Vec<String>,
     pub country:     Option<String>,
     pub begin_date:  Option<NaiveDate>,
@@ -36,6 +37,7 @@ pub struct Album {
     pub release_year: Option<i32>,
     pub album_type:   String,
     pub cover_path:   Option<String>,
+    #[sqlx(json)]
     pub genres:       Vec<String>,
     pub label:        Option<String>,
     pub track_count:  i32,

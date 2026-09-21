@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use kubuno_media::{config::Settings, router, state::AppState, workers};
+use kubuno_db::{params, DbPool};
+use kubuno_media::{config::Settings, router, state::AppState, workers, SCHEMA};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -136,51 +136,25 @@ async fn main() -> Result<()> {
 
     tracing::info!("Kubuno Media v{} démarrage…", env!("CARGO_PKG_VERSION"));
 
-    // Pool PostgreSQL — search_path=media,public
-    let opts = settings.database.connect_options()?
-        .options([("search_path", "media,public")]);
-    let pool = PgPoolOptions::new()
-        .max_connections(settings.database.max_connections)
-        .min_connections(settings.database.min_connections)
-        .acquire_timeout(settings.database.connect_timeout)
-        .connect_with(opts)
+    // Database pool. The engine (PostgreSQL / MySQL / SQLite) is the
+    // administrator's choice in `[database] engine`, read at run time; `connect`
+    // also creates the module's namespace (PostgreSQL schema, MySQL database, or
+    // the ATTACHed SQLite file).
+    let pool = kubuno_db::connect(&settings.database, SCHEMA)
         .await
-        .context("Connexion PostgreSQL")?;
+        .context("Connexion à la base de données")?;
 
-    // Migrations
+    // Migrations: the set for the pool's engine, kept inside the module's own
+    // namespace.
     if settings.database.run_migrations {
-        sqlx::query("CREATE SCHEMA IF NOT EXISTS media")
-            .execute(&pool)
-            .await
-            .context("Création du schéma media")?;
-
-        sqlx::query(
-            r#"CREATE TABLE IF NOT EXISTS media._sqlx_migrations (
-                version        BIGINT      PRIMARY KEY,
-                description    TEXT        NOT NULL,
-                installed_on   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                success        BOOLEAN     NOT NULL,
-                checksum       BYTEA       NOT NULL,
-                execution_time BIGINT      NOT NULL
-            )"#,
+        kubuno_db::migrations!(
+            "./migrations/postgres",
+            "./migrations/mysql",
+            "./migrations/sqlite",
         )
-        .execute(&pool)
+        .run(&pool, SCHEMA)
         .await
-        .context("Création table media._sqlx_migrations")?;
-
-        let migration_opts = settings.database.connect_options()?
-            .options([("search_path", "media,public")]);
-        let migration_pool = PgPoolOptions::new()
-            .max_connections(1)
-            .acquire_timeout(settings.database.connect_timeout)
-            .connect_with(migration_opts)
-            .await
-            .context("Pool migration media")?;
-
-        sqlx::migrate!("./migrations")
-            .run(&migration_pool)
-            .await
-            .context("Migrations")?;
+        .context("Migrations")?;
 
         // Synchronise the builtin web-radio catalogue (idempotent upsert by slug).
         kubuno_media::services::radio_catalog::seed(&pool).await;
@@ -296,12 +270,19 @@ async fn main() -> Result<()> {
 
 /// Scan rapide au démarrage : parcourt chaque bibliothèque et indexe
 /// les fichiers non encore présents en DB.
-async fn startup_scan(db: &sqlx::PgPool, settings: &Arc<Settings>) {
-    let libs = match sqlx::query!(
-        "SELECT id, path, lib_type FROM media.libraries ORDER BY created_at"
-    )
-    .fetch_all(db)
-    .await
+async fn startup_scan(db: &DbPool, settings: &Arc<Settings>) {
+    #[derive(sqlx::FromRow)]
+    struct LibRow {
+        id:       uuid::Uuid,
+        path:     String,
+        lib_type: String,
+    }
+    let libs = match db
+        .fetch_all_as::<LibRow>(
+            "SELECT id, path, lib_type FROM media.libraries ORDER BY created_at",
+            params![],
+        )
+        .await
     {
         Ok(rows) => rows,
         Err(e) => { tracing::error!(error = %e, "startup_scan: lecture bibliothèques"); return; }

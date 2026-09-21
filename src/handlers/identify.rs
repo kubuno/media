@@ -7,6 +7,7 @@ use axum::{
     extract::{Extension, Path, Query, State},
     Json,
 };
+use kubuno_db::params;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -25,6 +26,19 @@ use crate::{
     workers::metadata,
 };
 
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+#[derive(sqlx::FromRow)]
+struct MovieTitlePath {
+    title:     String,
+    file_path: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct AlbumTitleArtist {
+    title:       String,
+    artist_name: Option<String>,
+}
+
 #[derive(Deserialize)]
 pub struct IdentifyQuery {
     pub query: Option<String>,
@@ -42,12 +56,8 @@ fn clean_query(q: Option<String>) -> Option<String> {
 async fn ensure_unlocked(state: &AppState, table: &str, id: Uuid) -> Result<(), MediaError> {
     // Audited: every call site passes a literal table name (movies, tv_shows,
     // artists, albums); the id is bound.
-    let locked: Option<bool> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT meta_locked FROM media.{table} WHERE id = $1"
-    )))
-    .bind(id)
-    .fetch_optional(&state.db)
-    .await?;
+    let sql = format!("SELECT meta_locked FROM media.{table} WHERE id = $1");
+    let locked: Option<bool> = state.db.fetch_optional_scalar::<bool>(&sql, params![id]).await?;
     match locked {
         None => Err(MediaError::NotFound(format!("Élément {id}"))),
         Some(true) => Err(MediaError::Conflict(
@@ -63,15 +73,11 @@ pub struct LockBody {
 }
 
 async fn set_lock(state: &AppState, table: &str, id: Uuid, locked: bool) -> Result<Json<Value>, MediaError> {
-    // Audited: same — literal table names only, values bound.
-    let updated: Option<Uuid> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "UPDATE media.{table} SET meta_locked = $2 WHERE id = $1 RETURNING id"
-    )))
-    .bind(id)
-    .bind(locked)
-    .fetch_optional(&state.db)
-    .await?;
-    if updated.is_none() {
+    // Audited: same — literal table names only, values bound. No RETURNING:
+    // existence is checked from the affected row count instead.
+    let sql = format!("UPDATE media.{table} SET meta_locked = $2 WHERE id = $1");
+    let affected = state.db.execute(&sql, params![id, locked]).await?;
+    if affected == 0 {
         return Err(MediaError::NotFound(format!("Élément {id}")));
     }
     Ok(Json(json!({ "ok": true, "locked": locked })))
@@ -122,13 +128,14 @@ pub async fn identify_movie_search(
     Path(id): Path<Uuid>,
     Query(q): Query<IdentifyQuery>,
 ) -> Result<Json<Value>, MediaError> {
-    let movie = sqlx::query!(
-        "SELECT title, file_path FROM media.movies WHERE id = $1",
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Film {id}")))?;
+    let movie = state
+        .db
+        .fetch_optional_as::<MovieTitlePath>(
+            "SELECT title, file_path FROM media.movies WHERE id = $1",
+            params![id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Film {id}")))?;
 
     let filename = std::path::Path::new(&movie.file_path)
         .file_name()
@@ -224,8 +231,9 @@ pub async fn identify_movie_apply(
     Path(id): Path<Uuid>,
     Json(candidate): Json<tmdb::TmdbCandidate>,
 ) -> Result<Json<Value>, MediaError> {
-    let exists = sqlx::query_scalar!("SELECT id FROM media.movies WHERE id = $1", id)
-        .fetch_optional(&state.db)
+    let exists = state
+        .db
+        .fetch_optional_scalar::<Uuid>("SELECT id FROM media.movies WHERE id = $1", params![id])
         .await?;
     if exists.is_none() {
         return Err(MediaError::NotFound(format!("Film {id}")));
@@ -250,12 +258,13 @@ pub async fn identify_show_search(
     Path(id): Path<Uuid>,
     Query(q): Query<IdentifyQuery>,
 ) -> Result<Json<Value>, MediaError> {
-    let show = sqlx::query!("SELECT name FROM media.tv_shows WHERE id = $1", id)
-        .fetch_optional(&state.db)
+    let show_name = state
+        .db
+        .fetch_optional_scalar::<String>("SELECT name FROM media.tv_shows WHERE id = $1", params![id])
         .await?
         .ok_or_else(|| MediaError::NotFound(format!("Série {id}")))?;
 
-    let query = clean_query(q.query).unwrap_or(show.name);
+    let query = clean_query(q.query).unwrap_or(show_name);
     let tvmaze = TvMazeService::new(state.http.clone());
     let results = tvmaze
         .search_show(&query)
@@ -298,30 +307,33 @@ pub async fn identify_show_apply(
     Path(id): Path<Uuid>,
     Json(body): Json<ShowApplyBody>,
 ) -> Result<Json<Value>, MediaError> {
-    let show = sqlx::query!("SELECT name FROM media.tv_shows WHERE id = $1", id)
-        .fetch_optional(&state.db)
+    let show_name = state
+        .db
+        .fetch_optional_scalar::<String>("SELECT name FROM media.tv_shows WHERE id = $1", params![id])
         .await?
         .ok_or_else(|| MediaError::NotFound(format!("Série {id}")))?;
 
-    sqlx::query!(
-        "UPDATE media.tv_shows SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
-        id
-    )
-    .execute(&state.db)
-    .await?;
+    state
+        .db
+        .execute(
+            "UPDATE media.tv_shows SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
+            params![id],
+        )
+        .await?;
 
     let tvmaze = TvMazeService::new(state.http.clone());
     if let Err(e) = metadata::enrich_show_tvmaze(
-        &state.db, &state.http, &tvmaze, id, &show.name, Some(body.tvmaze_id),
+        &state.db, &state.http, &tvmaze, id, &show_name, Some(body.tvmaze_id),
     )
     .await
     {
-        sqlx::query!(
-            "UPDATE media.tv_shows SET meta_status = 'error_meta' WHERE id = $1",
-            id
-        )
-        .execute(&state.db)
-        .await?;
+        state
+            .db
+            .execute(
+                "UPDATE media.tv_shows SET meta_status = 'error_meta' WHERE id = $1",
+                params![id],
+            )
+            .await?;
         return Err(MediaError::Upstream(format!("TVMaze: {e}")));
     }
 
@@ -335,13 +347,15 @@ pub async fn refresh_show(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
     ensure_unlocked(&state, "tv_shows", id).await?;
-    let updated = sqlx::query_scalar!(
-        "UPDATE media.tv_shows SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1 RETURNING id",
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?;
-    if updated.is_none() {
+    // No RETURNING: existence is checked from the affected row count.
+    let affected = state
+        .db
+        .execute(
+            "UPDATE media.tv_shows SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1",
+            params![id],
+        )
+        .await?;
+    if affected == 0 {
         return Err(MediaError::NotFound(format!("Série {id}")));
     }
 
@@ -365,12 +379,13 @@ pub async fn identify_artist_search(
     Path(id): Path<Uuid>,
     Query(q): Query<IdentifyQuery>,
 ) -> Result<Json<Value>, MediaError> {
-    let artist = sqlx::query!("SELECT name FROM media.artists WHERE id = $1", id)
-        .fetch_optional(&state.db)
+    let artist_name = state
+        .db
+        .fetch_optional_scalar::<String>("SELECT name FROM media.artists WHERE id = $1", params![id])
         .await?
         .ok_or_else(|| MediaError::NotFound(format!("Artiste {id}")))?;
 
-    let query = clean_query(q.query).unwrap_or(artist.name);
+    let query = clean_query(q.query).unwrap_or(artist_name);
     let mb = MusicBrainzService::from_settings(state.http.clone(), &state.settings.metadata);
     let mut results = mb
         .search_artist(&query)
@@ -414,33 +429,36 @@ pub async fn identify_artist_apply(
     Path(id): Path<Uuid>,
     Json(body): Json<MbApplyBody>,
 ) -> Result<Json<Value>, MediaError> {
-    let artist = sqlx::query!("SELECT name FROM media.artists WHERE id = $1", id)
-        .fetch_optional(&state.db)
+    let artist_name = state
+        .db
+        .fetch_optional_scalar::<String>("SELECT name FROM media.artists WHERE id = $1", params![id])
         .await?
         .ok_or_else(|| MediaError::NotFound(format!("Artiste {id}")))?;
 
-    sqlx::query!(
-        "UPDATE media.artists SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
-        id
-    )
-    .execute(&state.db)
-    .await?;
+    state
+        .db
+        .execute(
+            "UPDATE media.artists SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
+            params![id],
+        )
+        .await?;
 
     let language = metadata::load_language(&state.db, &state.settings).await;
     let mb = MusicBrainzService::from_settings(state.http.clone(), &state.settings.metadata);
     let wikidata = WikidataService::new(state.http.clone(), language.clone());
 
     if let Err(e) = metadata::enrich_artist_mb(
-        &state.db, &mb, &wikidata, id, &artist.name, Some(&body.mbid), &language,
+        &state.db, &mb, &wikidata, id, &artist_name, Some(&body.mbid), &language,
     )
     .await
     {
-        sqlx::query!(
-            "UPDATE media.artists SET meta_status = 'error_meta' WHERE id = $1",
-            id
-        )
-        .execute(&state.db)
-        .await?;
+        state
+            .db
+            .execute(
+                "UPDATE media.artists SET meta_status = 'error_meta' WHERE id = $1",
+                params![id],
+            )
+            .await?;
         return Err(MediaError::Upstream(format!("MusicBrainz: {e}")));
     }
 
@@ -454,13 +472,15 @@ pub async fn refresh_artist(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
     ensure_unlocked(&state, "artists", id).await?;
-    let updated = sqlx::query_scalar!(
-        "UPDATE media.artists SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1 RETURNING id",
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?;
-    if updated.is_none() {
+    // No RETURNING: existence is checked from the affected row count.
+    let affected = state
+        .db
+        .execute(
+            "UPDATE media.artists SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1",
+            params![id],
+        )
+        .await?;
+    if affected == 0 {
         return Err(MediaError::NotFound(format!("Artiste {id}")));
     }
 
@@ -490,16 +510,17 @@ pub async fn identify_album_search(
     Path(id): Path<Uuid>,
     Query(q): Query<AlbumIdentifyQuery>,
 ) -> Result<Json<Value>, MediaError> {
-    let album = sqlx::query!(
-        r#"SELECT a.title, ar.name AS "artist_name?"
-           FROM media.albums a
-           LEFT JOIN media.artists ar ON ar.id = a.artist_id
-           WHERE a.id = $1"#,
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Album {id}")))?;
+    let album = state
+        .db
+        .fetch_optional_as::<AlbumTitleArtist>(
+            r#"SELECT a.title, ar.name AS artist_name
+               FROM media.albums a
+               LEFT JOIN media.artists ar ON ar.id = a.artist_id
+               WHERE a.id = $1"#,
+            params![id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Album {id}")))?;
 
     let query  = clean_query(q.query).unwrap_or(album.title);
     let artist = clean_query(q.artist).or(album.artist_name);
@@ -547,23 +568,25 @@ pub async fn identify_album_apply(
     Path(id): Path<Uuid>,
     Json(body): Json<MbApplyBody>,
 ) -> Result<Json<Value>, MediaError> {
-    let album = sqlx::query!(
-        r#"SELECT a.title, ar.name AS "artist_name?"
-           FROM media.albums a
-           LEFT JOIN media.artists ar ON ar.id = a.artist_id
-           WHERE a.id = $1"#,
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Album {id}")))?;
+    let album = state
+        .db
+        .fetch_optional_as::<AlbumTitleArtist>(
+            r#"SELECT a.title, ar.name AS artist_name
+               FROM media.albums a
+               LEFT JOIN media.artists ar ON ar.id = a.artist_id
+               WHERE a.id = $1"#,
+            params![id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Album {id}")))?;
 
-    sqlx::query!(
-        "UPDATE media.albums SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
-        id
-    )
-    .execute(&state.db)
-    .await?;
+    state
+        .db
+        .execute(
+            "UPDATE media.albums SET meta_status = 'fetching', meta_retries = 0 WHERE id = $1",
+            params![id],
+        )
+        .await?;
 
     let mb = MusicBrainzService::from_settings(state.http.clone(), &state.settings.metadata);
     if let Err(e) = metadata::enrich_album_mb(
@@ -571,12 +594,13 @@ pub async fn identify_album_apply(
     )
     .await
     {
-        sqlx::query!(
-            "UPDATE media.albums SET meta_status = 'error_meta' WHERE id = $1",
-            id
-        )
-        .execute(&state.db)
-        .await?;
+        state
+            .db
+            .execute(
+                "UPDATE media.albums SET meta_status = 'error_meta' WHERE id = $1",
+                params![id],
+            )
+            .await?;
         return Err(MediaError::Upstream(format!("MusicBrainz: {e}")));
     }
 
@@ -590,13 +614,15 @@ pub async fn refresh_album(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
     ensure_unlocked(&state, "albums", id).await?;
-    let updated = sqlx::query_scalar!(
-        "UPDATE media.albums SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1 RETURNING id",
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?;
-    if updated.is_none() {
+    // No RETURNING: existence is checked from the affected row count.
+    let affected = state
+        .db
+        .execute(
+            "UPDATE media.albums SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1",
+            params![id],
+        )
+        .await?;
+    if affected == 0 {
         return Err(MediaError::NotFound(format!("Album {id}")));
     }
 

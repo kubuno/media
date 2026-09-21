@@ -10,8 +10,8 @@
 //! Stream URLs can drift over time; users can add custom channels or use the
 //! discovery search (iptv-org community catalogue) to find current streams.
 
+use kubuno_db::{dialect::Assign, params, DbValue};
 use serde::Deserialize;
-use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -58,36 +58,50 @@ pub fn catalog() -> Vec<TvSeed> {
     ]
 }
 
-pub async fn seed(db: &PgPool) {
+pub async fn seed(db: &kubuno_db::DbPool) {
     let items = catalog();
     let count = items.len();
     // Remove builtin channels dropped from the catalogue (dead/withdrawn streams).
+    // Portable `slug NOT IN (...)`, replacing PostgreSQL's `slug <> ALL($1)`.
     let keep: Vec<String> = items.iter().map(|s| s.slug.to_string()).collect();
-    let _ = sqlx::query("DELETE FROM media.tv_channels WHERE is_builtin AND slug <> ALL($1)")
-        .bind(&keep)
-        .execute(db)
-        .await;
+    if keep.is_empty() {
+        let _ = db.execute("DELETE FROM media.tv_channels WHERE is_builtin", params![]).await;
+    } else {
+        let list = db.backend().in_list(1, keep.len());
+        let sql = format!("DELETE FROM media.tv_channels WHERE is_builtin AND slug NOT IN ({list})");
+        let binds: Vec<DbValue> = keep.iter().map(|s| s.clone().into()).collect();
+        let _ = db.execute(&sql, binds).await;
+    }
+
+    // Runtime query (never a macro: the module runs on three engines).
+    // `categories` is a JSON column now.
+    let clause = db.backend().upsert(
+        "media.tv_channels",
+        &["slug"],
+        &[
+            Assign::Incoming("name"),
+            Assign::Incoming("stream_url"),
+            Assign::Incoming("homepage"),
+            Assign::Incoming("logo"),
+            Assign::Incoming("categories"),
+            Assign::Incoming("country"),
+            Assign::Incoming("language"),
+        ],
+    );
+    let sql = format!(
+        r#"INSERT INTO media.tv_channels
+             (id, name, stream_url, homepage, logo, categories, country, language, is_builtin, slug)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9){clause}"#
+    );
     for s in items {
         let categories: Vec<String> = s.categories.iter().map(|t| t.to_string()).collect();
-        let res = sqlx::query(
-            r#"INSERT INTO media.tv_channels
-                 (name, stream_url, homepage, logo, categories, country, language, is_builtin, slug)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8)
-               ON CONFLICT (slug) DO UPDATE SET
-                 name = EXCLUDED.name, stream_url = EXCLUDED.stream_url, homepage = EXCLUDED.homepage,
-                 logo = EXCLUDED.logo, categories = EXCLUDED.categories, country = EXCLUDED.country,
-                 language = EXCLUDED.language, updated_at = NOW()"#,
-        )
-        .bind(s.name)
-        .bind(s.stream_url)
-        .bind(s.homepage)
-        .bind(s.logo)
-        .bind(&categories)
-        .bind(s.country)
-        .bind(s.language)
-        .bind(s.slug)
-        .execute(db)
-        .await;
+        let id = kubuno_db::new_id();
+        let res = db
+            .execute(
+                &sql,
+                params![id, s.name, s.stream_url, s.homepage, s.logo, categories, s.country, s.language, s.slug],
+            )
+            .await;
         if let Err(e) = res {
             tracing::warn!(error = %e, slug = %s.slug, "seed tv channel");
         }

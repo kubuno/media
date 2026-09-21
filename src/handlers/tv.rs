@@ -10,6 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use kubuno_db::{dialect::Assign, params};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -27,13 +28,52 @@ fn encode(s: &str) -> String {
 
 // ── Listing ───────────────────────────────────────────────────────────────────
 
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+// `categories` is a JSON array column (was `TEXT[]`), read with `#[sqlx(json)]`.
+#[derive(sqlx::FromRow)]
+struct ChannelRow {
+    id:           Uuid,
+    name:         String,
+    homepage:     Option<String>,
+    logo:         Option<String>,
+    #[sqlx(json)]
+    categories:   Vec<String>,
+    country:      Option<String>,
+    language:     Option<String>,
+    is_builtin:   bool,
+    owner_id:     Option<Uuid>,
+    click_count:  i64,
+}
+
+fn channel_json(r: &ChannelRow, favorite: bool) -> Value {
+    json!({
+        "id":          r.id,
+        "name":        r.name,
+        "stream_url":  format!("/api/v1/media/tv/channels/{}/stream", r.id),
+        "homepage":    r.homepage,
+        "logo":        r.logo,
+        "categories":  r.categories,
+        "country":     r.country,
+        "language":    r.language,
+        "is_builtin":  r.is_builtin,
+        "is_custom":   r.owner_id.is_some(),
+        "is_favorite": favorite,
+        "click_count": r.click_count,
+    })
+}
+
 async fn favorite_set(state: &AppState, user_id: Uuid) -> Result<HashSet<Uuid>, MediaError> {
-    let rows = sqlx::query!(
-        "SELECT channel_id FROM media.tv_favorites WHERE user_id = $1",
-        user_id
-    )
-    .fetch_all(&state.db)
-    .await?;
+    #[derive(sqlx::FromRow)]
+    struct FavRow {
+        channel_id: Uuid,
+    }
+    let rows = state
+        .db
+        .fetch_all_as::<FavRow>(
+            "SELECT channel_id FROM media.tv_favorites WHERE user_id = $1",
+            params![user_id],
+        )
+        .await?;
     Ok(rows.into_iter().map(|r| r.channel_id).collect())
 }
 
@@ -49,42 +89,45 @@ pub async fn list_channels(
     Extension(user): Extension<AuthUser>,
     Query(q): Query<ListChannelsQuery>,
 ) -> Result<Json<Value>, MediaError> {
-    let search   = q.q.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let search   = q.q.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
     let category = q.category.filter(|c| !c.is_empty());
     let mine     = q.mine.unwrap_or(false);
 
-    let rows = sqlx::query!(
-        r#"SELECT id, name, stream_url, homepage, logo, categories, country, language,
+    // `%` alone matches every row, so a single query text covers the filtered
+    // and unfiltered cases for the name search (no `$n IS NULL OR ...` guard
+    // needed for it).
+    let pattern = match &search {
+        Some(s) => format!("%{s}%"),
+        None => "%".to_string(),
+    };
+
+    // `categories` is now a JSON array column: `$3 = ANY(categories)` becomes
+    // the portable containment test below. It has no "matches everything"
+    // literal like `%`, so its optional filter binds its value twice under
+    // two distinct placeholders (once for the `IS NULL` guard, once for
+    // actual use) — placeholders are never reused.
+    let category_contains = state.db.backend().json_array_contains("categories", 4);
+    let sql = format!(
+        r#"SELECT id, name, homepage, logo, categories, country, language,
                   is_builtin, owner_id, click_count
            FROM media.tv_channels
            WHERE (is_builtin OR owner_id = $1)
-             AND ($2::text  IS NULL OR name ILIKE '%' || $2 || '%')
-             AND ($3::text  IS NULL OR $3 = ANY(categories))
-             AND (NOT $4::bool OR owner_id = $1)
-           ORDER BY is_builtin DESC, name"#,
-        user.id,
-        search,
-        category,
-        mine,
-    )
-    .fetch_all(&state.db)
-    .await?;
+             AND LOWER(name) LIKE $2
+             AND ($3 IS NULL OR {category_contains})
+             AND (NOT $5 OR owner_id = $6)
+           ORDER BY is_builtin DESC, name"#
+    );
+    let rows = state
+        .db
+        .fetch_all_as::<ChannelRow>(
+            &sql,
+            params![user.id, pattern, category.clone(), category, mine, user.id],
+        )
+        .await?;
 
     let favs = favorite_set(&state, user.id).await?;
-    let channels: Vec<Value> = rows.into_iter().map(|r| json!({
-        "id":          r.id,
-        "name":        r.name,
-        "stream_url":  format!("/api/v1/media/tv/channels/{}/stream", r.id),
-        "homepage":    r.homepage,
-        "logo":        r.logo,
-        "categories":  r.categories,
-        "country":     r.country,
-        "language":    r.language,
-        "is_builtin":  r.is_builtin,
-        "is_custom":   r.owner_id.is_some(),
-        "is_favorite": favs.contains(&r.id),
-        "click_count": r.click_count,
-    })).collect();
+    let channels: Vec<Value> =
+        rows.iter().map(|r| channel_json(r, favs.contains(&r.id))).collect();
 
     Ok(Json(json!({ "channels": channels })))
 }
@@ -93,17 +136,34 @@ pub async fn list_categories(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
-        r#"SELECT c.cat AS "cat!", COUNT(*) AS "count!"
-           FROM media.tv_channels t, unnest(t.categories) AS c(cat)
-           WHERE t.is_builtin OR t.owner_id = $1
-           GROUP BY c.cat ORDER BY COUNT(*) DESC, c.cat"#,
-        user.id
-    )
-    .fetch_all(&state.db)
-    .await?;
-    let categories: Vec<Value> = rows.into_iter()
-        .map(|r| json!({ "category": r.cat, "count": r.count }))
+    // `categories` is now a JSON array column: there is no portable `unnest()`.
+    // Fetch each visible channel's categories and aggregate the facet counts
+    // here in Rust instead of in SQL.
+    #[derive(sqlx::FromRow)]
+    struct CategoriesRow {
+        #[sqlx(json)]
+        categories: Vec<String>,
+    }
+    let rows = state
+        .db
+        .fetch_all_as::<CategoriesRow>(
+            "SELECT categories FROM media.tv_channels WHERE is_builtin OR owner_id = $1",
+            params![user.id],
+        )
+        .await?;
+
+    let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for row in rows {
+        for cat in row.categories {
+            *counts.entry(cat).or_insert(0) += 1;
+        }
+    }
+    let mut counted: Vec<(String, i64)> = counts.into_iter().collect();
+    counted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+    let categories: Vec<Value> = counted
+        .into_iter()
+        .map(|(category, count)| json!({ "category": category, "count": count }))
         .collect();
     Ok(Json(json!({ "categories": categories })))
 }
@@ -112,31 +172,19 @@ pub async fn list_favorites(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
-        r#"SELECT t.id, t.name, t.homepage, t.logo, t.categories, t.country, t.language,
-                  t.is_builtin, t.owner_id, t.click_count
-           FROM media.tv_favorites f
-           JOIN media.tv_channels t ON t.id = f.channel_id
-           WHERE f.user_id = $1
-           ORDER BY f.created_at DESC"#,
-        user.id
-    )
-    .fetch_all(&state.db)
-    .await?;
-    let channels: Vec<Value> = rows.into_iter().map(|r| json!({
-        "id":          r.id,
-        "name":        r.name,
-        "stream_url":  format!("/api/v1/media/tv/channels/{}/stream", r.id),
-        "homepage":    r.homepage,
-        "logo":        r.logo,
-        "categories":  r.categories,
-        "country":     r.country,
-        "language":    r.language,
-        "is_builtin":  r.is_builtin,
-        "is_custom":   r.owner_id.is_some(),
-        "is_favorite": true,
-        "click_count": r.click_count,
-    })).collect();
+    let rows = state
+        .db
+        .fetch_all_as::<ChannelRow>(
+            r#"SELECT t.id, t.name, t.homepage, t.logo, t.categories, t.country, t.language,
+                      t.is_builtin, t.owner_id, t.click_count
+               FROM media.tv_favorites f
+               JOIN media.tv_channels t ON t.id = f.channel_id
+               WHERE f.user_id = $1
+               ORDER BY f.created_at DESC"#,
+            params![user.id],
+        )
+        .await?;
+    let channels: Vec<Value> = rows.iter().map(|r| channel_json(r, true)).collect();
     Ok(Json(json!({ "channels": channels })))
 }
 
@@ -145,32 +193,21 @@ pub async fn list_recent(
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
     let favs = favorite_set(&state, user.id).await?;
-    let rows = sqlx::query!(
-        r#"SELECT t.id, t.name, t.homepage, t.logo, t.categories, t.country, t.language,
-                  t.is_builtin, t.owner_id, t.click_count
-           FROM media.tv_recent r
-           JOIN media.tv_channels t ON t.id = r.channel_id
-           WHERE r.user_id = $1
-           ORDER BY r.played_at DESC
-           LIMIT 30"#,
-        user.id
-    )
-    .fetch_all(&state.db)
-    .await?;
-    let channels: Vec<Value> = rows.into_iter().map(|r| json!({
-        "id":          r.id,
-        "name":        r.name,
-        "stream_url":  format!("/api/v1/media/tv/channels/{}/stream", r.id),
-        "homepage":    r.homepage,
-        "logo":        r.logo,
-        "categories":  r.categories,
-        "country":     r.country,
-        "language":    r.language,
-        "is_builtin":  r.is_builtin,
-        "is_custom":   r.owner_id.is_some(),
-        "is_favorite": favs.contains(&r.id),
-        "click_count": r.click_count,
-    })).collect();
+    let rows = state
+        .db
+        .fetch_all_as::<ChannelRow>(
+            r#"SELECT t.id, t.name, t.homepage, t.logo, t.categories, t.country, t.language,
+                      t.is_builtin, t.owner_id, t.click_count
+               FROM media.tv_recent r
+               JOIN media.tv_channels t ON t.id = r.channel_id
+               WHERE r.user_id = $1
+               ORDER BY r.played_at DESC
+               LIMIT 30"#,
+            params![user.id],
+        )
+        .await?;
+    let channels: Vec<Value> =
+        rows.iter().map(|r| channel_json(r, favs.contains(&r.id))).collect();
     Ok(Json(json!({ "channels": channels })))
 }
 
@@ -208,22 +245,27 @@ pub async fn create_channel(
     validate_stream_url(&body.stream_url)?;
     let categories = body.categories.unwrap_or_default();
 
-    let id: Uuid = sqlx::query_scalar!(
-        r#"INSERT INTO media.tv_channels
-             (name, stream_url, homepage, logo, categories, country, language, owner_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING id"#,
-        name,
-        body.stream_url.trim(),
-        body.homepage,
-        body.logo,
-        &categories,
-        body.country,
-        body.language,
-        user.id,
-    )
-    .fetch_one(&state.db)
-    .await?;
+    // No `RETURNING` (not portable): mint the id in Rust and bind it.
+    let id = kubuno_db::new_id();
+    state
+        .db
+        .execute(
+            r#"INSERT INTO media.tv_channels
+                 (id, name, stream_url, homepage, logo, categories, country, language, owner_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
+            params![
+                id,
+                name,
+                body.stream_url.trim(),
+                body.homepage,
+                body.logo,
+                categories,
+                body.country,
+                body.language,
+                user.id,
+            ],
+        )
+        .await?;
 
     Ok(Json(json!({ "ok": true, "id": id })))
 }
@@ -233,13 +275,14 @@ pub async fn delete_channel(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let deleted = sqlx::query!(
-        "DELETE FROM media.tv_channels WHERE id = $1 AND owner_id = $2 RETURNING id",
-        id, user.id
-    )
-    .fetch_optional(&state.db)
-    .await?;
-    if deleted.is_none() {
+    let deleted = state
+        .db
+        .execute(
+            "DELETE FROM media.tv_channels WHERE id = $1 AND owner_id = $2",
+            params![id, user.id],
+        )
+        .await?;
+    if deleted == 0 {
         return Err(MediaError::NotFound(format!("Chaîne {id}")));
     }
     Ok(Json(json!({ "ok": true })))
@@ -252,21 +295,22 @@ pub async fn toggle_favorite(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let removed = sqlx::query!(
-        "DELETE FROM media.tv_favorites WHERE user_id = $1 AND channel_id = $2 RETURNING channel_id",
-        user.id, id
-    )
-    .fetch_optional(&state.db)
-    .await?;
-    if removed.is_some() {
+    let removed = state
+        .db
+        .execute(
+            "DELETE FROM media.tv_favorites WHERE user_id = $1 AND channel_id = $2",
+            params![user.id, id],
+        )
+        .await?;
+    if removed > 0 {
         return Ok(Json(json!({ "is_favorite": false })));
     }
-    sqlx::query!(
-        "INSERT INTO media.tv_favorites (user_id, channel_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        user.id, id
-    )
-    .execute(&state.db)
-    .await?;
+    let sql = format!(
+        "INSERT {}INTO media.tv_favorites (user_id, channel_id) VALUES ($1, $2){}",
+        state.db.backend().insert_ignore_prefix(),
+        state.db.backend().on_conflict_do_nothing(&["user_id", "channel_id"]),
+    );
+    state.db.execute(&sql, params![user.id, id]).await?;
     Ok(Json(json!({ "is_favorite": true })))
 }
 
@@ -275,19 +319,25 @@ pub async fn record_play(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    sqlx::query!(
-        r#"INSERT INTO media.tv_recent (user_id, channel_id) VALUES ($1, $2)
-           ON CONFLICT (user_id, channel_id) DO UPDATE SET played_at = NOW()"#,
-        user.id, id
-    )
-    .execute(&state.db)
-    .await?;
-    sqlx::query!(
-        "UPDATE media.tv_channels SET click_count = click_count + 1 WHERE id = $1",
-        id
-    )
-    .execute(&state.db)
-    .await?;
+    // `ON CONFLICT (...) DO UPDATE SET played_at = NOW()` — bind a Rust
+    // timestamp as the incoming value instead of relying on `NOW()`.
+    let played_at = chrono::Utc::now();
+    let clause = state.db.backend().upsert(
+        "media.tv_recent",
+        &["user_id", "channel_id"],
+        &[Assign::Incoming("played_at")],
+    );
+    let sql =
+        format!("INSERT INTO media.tv_recent (user_id, channel_id, played_at) VALUES ($1, $2, $3){clause}");
+    state.db.execute(&sql, params![user.id, id, played_at]).await?;
+
+    state
+        .db
+        .execute(
+            "UPDATE media.tv_channels SET click_count = click_count + 1 WHERE id = $1",
+            params![id],
+        )
+        .await?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -454,13 +504,18 @@ pub async fn stream(
     Path(id): Path<Uuid>,
     _headers: HeaderMap,
 ) -> Result<Response, MediaError> {
-    let row = sqlx::query!(
-        "SELECT stream_url FROM media.tv_channels WHERE id = $1 AND (is_builtin OR owner_id = $2)",
-        id, user.id
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Chaîne {id}")))?;
+    #[derive(sqlx::FromRow)]
+    struct StreamUrlRow {
+        stream_url: String,
+    }
+    let row = state
+        .db
+        .fetch_optional_as::<StreamUrlRow>(
+            "SELECT stream_url FROM media.tv_channels WHERE id = $1 AND (is_builtin OR owner_id = $2)",
+            params![id, user.id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Chaîne {id}")))?;
 
     proxy_fetch(&state, &row.stream_url).await
 }

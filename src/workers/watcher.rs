@@ -1,6 +1,6 @@
 use anyhow::Result;
+use kubuno_db::{params, DbPool};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use sqlx::PgPool;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,15 +32,24 @@ pub async fn start(state: AppState) {
     });
 }
 
+/// One library, for the runtime `SELECT id, path, lib_type` below.
+#[derive(sqlx::FromRow)]
+struct LibraryRow {
+    id:       Uuid,
+    path:     String,
+    lib_type: String,
+}
+
 async fn run_watch_cycle(state: &AppState) -> Result<()> {
     let db       = &state.db;
     let settings = &state.settings;
     // Charger les bibliothèques
-    let libs = sqlx::query!(
-        "SELECT id, path, lib_type FROM media.libraries ORDER BY created_at"
-    )
-    .fetch_all(db)
-    .await?;
+    let libs = db
+        .fetch_all_as::<LibraryRow>(
+            "SELECT id, path, lib_type FROM media.libraries ORDER BY created_at",
+            params![],
+        )
+        .await?;
 
     if libs.is_empty() {
         tokio::time::sleep(Duration::from_secs(60)).await;
@@ -139,16 +148,22 @@ async fn run_watch_cycle(state: &AppState) -> Result<()> {
 }
 
 /// Sorted (id, path) pairs of every library, for change detection. Runtime query
-/// (never a macro: the module ships a `.sqlx` offline cache). `None` on error, so
-/// a transient database hiccup does not trigger a pointless full re-scan.
-async fn library_fingerprint(db: &PgPool) -> Option<Vec<(Uuid, String)>> {
-    match sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, path FROM media.libraries ORDER BY id, path",
-    )
-    .fetch_all(db)
-    .await
+/// (one binary, three engines: kubuno-db). `None` on error, so a transient
+/// database hiccup does not trigger a pointless full re-scan.
+async fn library_fingerprint(db: &DbPool) -> Option<Vec<(Uuid, String)>> {
+    #[derive(sqlx::FromRow)]
+    struct IdPath {
+        id:   Uuid,
+        path: String,
+    }
+    match db
+        .fetch_all_as::<IdPath>(
+            "SELECT id, path FROM media.libraries ORDER BY id, path",
+            params![],
+        )
+        .await
     {
-        Ok(rows) => Some(rows),
+        Ok(rows) => Some(rows.into_iter().map(|r| (r.id, r.path)).collect()),
         Err(e) => {
             tracing::error!(error = %e, "Watcher : lecture des bibliothèques");
             None
@@ -159,7 +174,7 @@ async fn library_fingerprint(db: &PgPool) -> Option<Vec<(Uuid, String)>> {
 async fn handle_event(
     event: Event,
     path_to_lib: &HashMap<PathBuf, (Uuid, String)>,
-    db: &PgPool,
+    db: &DbPool,
     settings: &Arc<Settings>,
 ) {
     match event.kind {

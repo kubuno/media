@@ -9,6 +9,19 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 ## [Unreleased]
 
+### Changed
+
+- **Runs on PostgreSQL, MySQL/MariaDB or SQLite, chosen at install time.** Media
+  moves off its PostgreSQL-only stack onto the runtime-dispatch kubuno-db
+  foundation: the same binary connects to whichever engine the administrator
+  configures, read at run time. The compile-time query layer (and its shipped
+  `.sqlx` cache) is gone; every query runs at run time. Existing PostgreSQL
+  instances keep their data and migrate in place; a fresh MySQL or SQLite
+  instance builds the same schema. Array columns (genres, networks, tags,
+  categories, shared libraries, extra posters) are stored as JSON so they carry
+  across all three engines, and rating/popularity columns move to a portable
+  floating-point type. No behaviour change for the end user.
+
 ### Security
 
 - **Database driver updated past an unfixable advisory.** The previous line

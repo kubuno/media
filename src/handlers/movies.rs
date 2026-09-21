@@ -2,8 +2,14 @@ use axum::{
     extract::{Extension, Path, Query, State},
     Json,
 };
+use chrono::{DateTime, NaiveDate, Utc};
+use kubuno_db::{
+    dialect::{Assign, SqlType},
+    params,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sqlx::types::JsonValue;
 use uuid::Uuid;
 
 use crate::{
@@ -17,8 +23,8 @@ use crate::{
 /// Drops the movies the instance's age limit hides from this user.
 ///
 /// Filtering happens in RUST, on rows already deserialised, because the list
-/// queries are `query!` macros backed by the shipped `.sqlx` offline cache and
-/// must not gain a WHERE clause. Two consequences, accepted knowingly:
+/// queries must stay portable across the three engines and must not gain a
+/// per-engine WHERE clause. Two consequences, accepted knowingly:
 ///   * a paginated page can come back SHORTER than its limit — the client shows
 ///     fewer cards, it never shows a forbidden one;
 ///   * this is a display filter only. The HARD gate is in `handlers::stream`,
@@ -59,6 +65,20 @@ pub struct SetPosterBody {
     pub poster_url: String,
 }
 
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+#[derive(sqlx::FromRow)]
+struct MovieListRow {
+    id:              Uuid,
+    title:           String,
+    original_title:  Option<String>,
+    release_date:    Option<NaiveDate>,
+    vote_average:    Option<f64>,
+    poster_path:     Option<String>,
+    backdrop_path:   Option<String>,
+    duration_secs:   i32,
+    meta_status:     String,
+}
+
 pub async fn list_movies(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -67,18 +87,17 @@ pub async fn list_movies(
     let limit  = q.limit.unwrap_or(50).min(200);
     let offset = (q.page.unwrap_or(1) - 1) * limit;
 
-    let rows = sqlx::query!(
+    // `vote_average` is NUMERIC: cast it to a portably-decodable DOUBLE per engine.
+    let vote_avg = state.db.backend().cast("vote_average", SqlType::Double);
+    let sql = format!(
         r#"SELECT id, title, original_title, release_date,
-                  vote_average::FLOAT8, poster_path, backdrop_path,
+                  {vote_avg} AS vote_average, poster_path, backdrop_path,
                   duration_secs, meta_status
            FROM media.movies
            ORDER BY title
-           LIMIT $1 OFFSET $2"#,
-        limit,
-        offset,
-    )
-    .fetch_all(&state.db)
-    .await?;
+           LIMIT $1 OFFSET $2"#
+    );
+    let rows = state.db.fetch_all_as::<MovieListRow>(&sql, params![limit, offset]).await?;
 
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let visible = visible_movie_ids(&state, &user, &ids).await;
@@ -100,27 +119,77 @@ pub async fn list_movies(
     Ok(Json(json!({ "movies": movies })))
 }
 
+#[derive(sqlx::FromRow)]
+#[allow(dead_code)] // over-selects (SELECT *); not every column feeds the JSON response
+struct MovieDetailRow {
+    id:                   Uuid,
+    library_id:           Uuid,
+    file_path:            String,
+    file_size:            i64,
+    duration_secs:        i32,
+    video_codec:          Option<String>,
+    audio_codec:          Option<String>,
+    resolution_w:         Option<i32>,
+    resolution_h:         Option<i32>,
+    tmdb_id:              Option<i32>,
+    imdb_id:              Option<String>,
+    title:                String,
+    original_title:       Option<String>,
+    overview:             Option<String>,
+    tagline:              Option<String>,
+    release_date:         Option<NaiveDate>,
+    runtime_mins:         Option<i32>,
+    poster_path:          Option<String>,
+    backdrop_path:        Option<String>,
+    vote_average:         Option<f64>,
+    vote_count:           Option<i32>,
+    popularity:           Option<f64>,
+    #[sqlx(json)]
+    genres:               Vec<String>,
+    original_language:    Option<String>,
+    #[sqlx(json)]
+    production_countries: Vec<String>,
+    meta_status:          String,
+    cast_json:            JsonValue,
+    crew_json:            JsonValue,
+    subtitles:            JsonValue,
+    transcode_status:     JsonValue,
+    content_rating:       Option<String>,
+    trailer_key:          Option<String>,
+    #[sqlx(json)]
+    poster_urls:          Vec<String>,
+    meta_locked:          bool,
+    ratings_json:         JsonValue,
+    #[allow(dead_code)]
+    created_at:           DateTime<Utc>,
+    #[allow(dead_code)]
+    updated_at:           DateTime<Utc>,
+}
+
 pub async fn get_movie(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let row = sqlx::query!(
+    // `vote_average`/`popularity` are NUMERIC: cast to a portably-decodable
+    // DOUBLE per engine.
+    let vote_avg    = state.db.backend().cast("vote_average", SqlType::Double);
+    let popularity  = state.db.backend().cast("popularity", SqlType::Double);
+    let sql = format!(
         r#"SELECT id, library_id, file_path, file_size, duration_secs,
                   video_codec, audio_codec, resolution_w, resolution_h,
                   tmdb_id, imdb_id, title, original_title, overview, tagline,
                   release_date, runtime_mins, poster_path, backdrop_path,
-                  vote_average::FLOAT8, vote_count, popularity::FLOAT8, genres,
+                  {vote_avg} AS vote_average, vote_count, {popularity} AS popularity, genres,
                   original_language, production_countries, meta_status,
                   cast_json, crew_json, subtitles, transcode_status,
                   content_rating, trailer_key, poster_urls, meta_locked, ratings_json,
                   created_at, updated_at
-           FROM media.movies WHERE id = $1"#,
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Film {id}")))?;
+           FROM media.movies WHERE id = $1"#
+    );
+    let row = state.db.fetch_optional_as::<MovieDetailRow>(&sql, params![id])
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Film {id}")))?;
 
     // The detail page already carries the certification, so the age limit is
     // applied without a second query. Refused outright rather than trimmed: the
@@ -172,18 +241,28 @@ pub async fn get_movie(
     })))
 }
 
+#[derive(sqlx::FromRow)]
+struct MovieRecentRow {
+    id:            Uuid,
+    title:         String,
+    release_date:  Option<NaiveDate>,
+    vote_average:  Option<f64>,
+    poster_path:   Option<String>,
+    duration_secs: i32,
+}
+
 pub async fn recent_movies(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
-        r#"SELECT id, title, release_date, vote_average::FLOAT8, poster_path, duration_secs
+    let vote_avg = state.db.backend().cast("vote_average", SqlType::Double);
+    let sql = format!(
+        r#"SELECT id, title, release_date, {vote_avg} AS vote_average, poster_path, duration_secs
            FROM media.movies
            ORDER BY created_at DESC
            LIMIT 20"#
-    )
-    .fetch_all(&state.db)
-    .await?;
+    );
+    let rows = state.db.fetch_all_as::<MovieRecentRow>(&sql, params![]).await?;
 
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let visible = visible_movie_ids(&state, &user, &ids).await;
@@ -202,22 +281,32 @@ pub async fn recent_movies(
     Ok(Json(json!({ "movies": movies })))
 }
 
+#[derive(sqlx::FromRow)]
+struct ContinueWatchingRow {
+    id:              Uuid,
+    title:           String,
+    poster_path:     Option<String>,
+    backdrop_path:   Option<String>,
+    duration_secs:   i32,
+    position_secs:   i32,
+    percent_played:  f64,
+}
+
 pub async fn continue_watching(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
+    let percent_played = state.db.backend().cast("p.percent_played", SqlType::Double);
+    let sql = format!(
         r#"SELECT m.id, m.title, m.poster_path, m.backdrop_path,
-                  m.duration_secs, p.position_secs, p.percent_played::FLOAT8
+                  m.duration_secs, p.position_secs, {percent_played} AS percent_played
            FROM media.movies m
            JOIN media.video_progress p ON p.item_id = m.id AND p.item_type = 'movie'
            WHERE p.user_id = $1 AND p.is_watched = FALSE AND p.percent_played > 0
            ORDER BY p.last_played_at DESC
-           LIMIT 10"#,
-        user.id
-    )
-    .fetch_all(&state.db)
-    .await?;
+           LIMIT 10"#
+    );
+    let rows = state.db.fetch_all_as::<ContinueWatchingRow>(&sql, params![user.id]).await?;
 
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let visible = visible_movie_ids(&state, &user, &ids).await;
@@ -245,31 +334,32 @@ pub async fn mark_watched(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let current = sqlx::query_scalar!(
+    let current = state.db.fetch_optional_scalar::<bool>(
         "SELECT is_watched FROM media.video_progress WHERE user_id=$1 AND item_type='movie' AND item_id=$2",
-        user.id, id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+        params![user.id, id],
+    ).await?;
 
     let new_watched = !current.unwrap_or(false);
     let percent: f64 = if new_watched { 100.0 } else { 0.0 };
+    let now = Utc::now();
 
-    sqlx::query!(
+    // `last_played_at` is bound as a Rust timestamp (never `NOW()` in SQL) so
+    // the insert and the update branch agree on the exact same instant.
+    let clause = state.db.backend().upsert(
+        "media.video_progress",
+        &["user_id", "item_type", "item_id"],
+        &[
+            Assign::Incoming("is_watched"),
+            Assign::Incoming("percent_played"),
+            Assign::Incoming("last_played_at"),
+        ],
+    );
+    let sql = format!(
         r#"INSERT INTO media.video_progress
-               (user_id, item_type, item_id, position_secs, duration_secs, percent_played, is_watched)
-           VALUES ($1, 'movie', $2, 0, 0, $3::NUMERIC, $4)
-           ON CONFLICT (user_id, item_type, item_id) DO UPDATE
-               SET is_watched     = EXCLUDED.is_watched,
-                   percent_played = EXCLUDED.percent_played,
-                   last_played_at = NOW()"#,
-        user.id,
-        id,
-        percent as f64,
-        new_watched,
-    )
-    .execute(&state.db)
-    .await?;
+               (user_id, item_type, item_id, position_secs, duration_secs, percent_played, is_watched, last_played_at)
+           VALUES ($1, 'movie', $2, 0, 0, $3, $4, $5){clause}"#
+    );
+    state.db.execute(&sql, params![user.id, id, percent, new_watched, now]).await?;
 
     Ok(Json(json!({ "is_watched": new_watched })))
 }
@@ -282,14 +372,14 @@ pub async fn refresh_metadata(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
     ensure_movie_unlocked(&state, id).await?;
-    let updated = sqlx::query_scalar!(
-        "UPDATE media.movies SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1 RETURNING id",
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+    // No `RETURNING` (MySQL/SQLite don't have it on UPDATE): the number of
+    // affected rows tells us whether the movie existed.
+    let affected = state.db.execute(
+        "UPDATE media.movies SET meta_status = 'pending_meta', meta_retries = 0 WHERE id = $1",
+        params![id],
+    ).await?;
 
-    if updated.is_none() {
+    if affected == 0 {
         return Err(MediaError::NotFound(format!("Film {id}")));
     }
 
@@ -308,12 +398,10 @@ pub async fn refresh_metadata(
 
 /// Reject refresh/dissociate on a metadata-locked movie.
 async fn ensure_movie_unlocked(state: &AppState, id: Uuid) -> Result<(), MediaError> {
-    let locked = sqlx::query_scalar!(
+    let locked = state.db.fetch_optional_scalar::<bool>(
         "SELECT meta_locked FROM media.movies WHERE id = $1",
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+        params![id],
+    ).await?;
     match locked {
         None => Err(MediaError::NotFound(format!("Film {id}"))),
         Some(true) => Err(MediaError::Conflict(
@@ -329,7 +417,11 @@ pub async fn dissociate(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
     ensure_movie_unlocked(&state, id).await?;
-    let updated = sqlx::query_scalar!(
+    // `genres`/`production_countries` are JSON columns now: an empty Vec<String>
+    // binds as the JSON array `[]`, the equivalent of the old `'{}'` PG array
+    // literal. `cast_json`/`crew_json` are plain JSON columns: bind `[]` directly.
+    let empty_strings: Vec<String> = Vec::new();
+    let affected = state.db.execute(
         r#"UPDATE media.movies
            SET tmdb_id              = NULL,
                imdb_id              = NULL,
@@ -342,21 +434,18 @@ pub async fn dissociate(
                vote_average         = NULL,
                vote_count           = NULL,
                popularity           = NULL,
-               genres               = '{}',
+               genres               = $1,
                original_language    = NULL,
-               production_countries = '{}',
-               cast_json            = '[]',
-               crew_json            = '[]',
+               production_countries = $2,
+               cast_json            = $3,
+               crew_json            = $4,
                meta_status          = 'pending_meta',
                meta_retries         = 0
-           WHERE id = $1
-           RETURNING id"#,
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+           WHERE id = $5"#,
+        params![empty_strings.clone(), empty_strings, json!([]), json!([]), id],
+    ).await?;
 
-    if updated.is_none() {
+    if affected == 0 {
         return Err(MediaError::NotFound(format!("Film {id}")));
     }
 
@@ -365,11 +454,21 @@ pub async fn dissociate(
 
 // ── GET /watchlist ────────────────────────────────────────────────────────────
 
+#[derive(sqlx::FromRow)]
+struct WatchlistRow {
+    item_type:     String,
+    item_id:       Uuid,
+    added_at:      DateTime<Utc>,
+    title:         Option<String>,
+    poster_path:   Option<String>,
+    release_date:  Option<NaiveDate>,
+}
+
 pub async fn get_watchlist(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
+    let rows = state.db.fetch_all_as::<WatchlistRow>(
         r#"SELECT w.item_type, w.item_id, w.added_at,
                   COALESCE(m.title, s.name)               AS title,
                   COALESCE(m.poster_path, s.poster_path)  AS poster_path,
@@ -379,10 +478,8 @@ pub async fn get_watchlist(
            LEFT JOIN media.tv_shows s ON s.id = w.item_id AND w.item_type = 'show'
            WHERE w.user_id = $1
            ORDER BY w.added_at DESC"#,
-        user.id
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![user.id],
+    ).await?;
 
     // Only the movie entries carry a certification; show entries pass through.
     let ids: Vec<Uuid> = rows.iter()
@@ -419,16 +516,12 @@ pub async fn watchlist_add(
         return Err(MediaError::Validation("item_type must be 'movie' or 'show'".into()));
     }
 
-    sqlx::query!(
-        r#"INSERT INTO media.watchlist (user_id, item_type, item_id)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (user_id, item_type, item_id) DO NOTHING"#,
-        user.id,
-        body.item_type,
-        body.item_id,
-    )
-    .execute(&state.db)
-    .await?;
+    let sql = format!(
+        "INSERT {}INTO media.watchlist (user_id, item_type, item_id) VALUES ($1, $2, $3){}",
+        state.db.backend().insert_ignore_prefix(),
+        state.db.backend().on_conflict_do_nothing(&["user_id", "item_type", "item_id"]),
+    );
+    state.db.execute(&sql, params![user.id, body.item_type, body.item_id]).await?;
 
     Ok(Json(json!({ "added": true })))
 }
@@ -440,14 +533,10 @@ pub async fn watchlist_remove(
     Extension(user): Extension<AuthUser>,
     Path((item_type, item_id)): Path<(String, Uuid)>,
 ) -> Result<Json<Value>, MediaError> {
-    sqlx::query!(
+    state.db.execute(
         "DELETE FROM media.watchlist WHERE user_id=$1 AND item_type=$2 AND item_id=$3",
-        user.id,
-        item_type,
-        item_id,
-    )
-    .execute(&state.db)
-    .await?;
+        params![user.id, item_type, item_id],
+    ).await?;
 
     Ok(Json(json!({ "removed": true })))
 }
@@ -459,13 +548,11 @@ pub async fn watchlist_status(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let count = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM media.watchlist WHERE user_id=$1 AND item_type='movie' AND item_id=$2",
-        user.id, id
-    )
-    .fetch_one(&state.db)
-    .await?
-    .unwrap_or(0);
+    let sql = format!(
+        "SELECT {} FROM media.watchlist WHERE user_id=$1 AND item_type='movie' AND item_id=$2",
+        state.db.backend().count_bigint("*"),
+    );
+    let count: i64 = state.db.fetch_scalar(&sql, params![user.id, id]).await?;
 
     Ok(Json(json!({ "in_watchlist": count > 0 })))
 }
@@ -478,33 +565,39 @@ pub async fn set_poster(
     Path(id): Path<Uuid>,
     Json(body): Json<SetPosterBody>,
 ) -> Result<Json<Value>, MediaError> {
-    sqlx::query!(
-        "UPDATE media.movies SET poster_path = $1, updated_at = NOW() WHERE id = $2",
-        body.poster_url,
-        id,
-    )
-    .execute(&state.db)
-    .await?;
+    // `updated_at` is maintained by the engine's trigger/ON UPDATE clause, not set here.
+    state.db.execute(
+        "UPDATE media.movies SET poster_path = $1 WHERE id = $2",
+        params![body.poster_url, id],
+    ).await?;
 
     Ok(Json(json!({ "ok": true })))
 }
 
 // ── GET /movies/:id/play-history ─────────────────────────────────────────────
 
+#[derive(sqlx::FromRow)]
+struct PlayHistoryRow {
+    position_secs:   i32,
+    duration_secs:   i32,
+    percent_played:  f64,
+    is_watched:      bool,
+    last_played_at:  DateTime<Utc>,
+}
+
 pub async fn play_history(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let row = sqlx::query!(
-        r#"SELECT position_secs, duration_secs, percent_played::FLOAT8,
+    let percent_played = state.db.backend().cast("percent_played", SqlType::Double);
+    let sql = format!(
+        r#"SELECT position_secs, duration_secs, {percent_played} AS percent_played,
                   is_watched, last_played_at
            FROM media.video_progress
-           WHERE user_id=$1 AND item_type='movie' AND item_id=$2"#,
-        user.id, id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+           WHERE user_id=$1 AND item_type='movie' AND item_id=$2"#
+    );
+    let row = state.db.fetch_optional_as::<PlayHistoryRow>(&sql, params![user.id, id]).await?;
 
     match row {
         Some(r) => Ok(Json(json!({

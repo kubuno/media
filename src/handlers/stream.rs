@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use kubuno_db::params;
 use serde_json::json;
 use std::io::SeekFrom;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -23,9 +24,8 @@ use crate::{
 /// elsewhere are cosmetic, a guessed id would defeat them.
 ///
 /// Administrators are never restricted — they must be able to check what they
-/// configured. The certification is read with a dedicated RUNTIME query (never a
-/// macro: the module ships a `.sqlx` offline cache) which yields nothing for a
-/// TV episode, correctly treating it as unrated.
+/// configured. The certification is read with a dedicated runtime query, which
+/// yields nothing for a TV episode, correctly treating it as unrated.
 async fn ensure_playable(
     state: &AppState,
     user: &AuthUser,
@@ -63,22 +63,22 @@ pub async fn master_playlist(
 
 /// Renvoie la playlist M3U8 d'une qualité, démarrant la transcription si nécessaire.
 /// Resolve a playable video file by id: a movie first, else a TV episode.
-async fn video_file_path(db: &sqlx::PgPool, id: Uuid) -> Result<Option<String>, sqlx::Error> {
-    let movie: Option<String> = sqlx::query_scalar!(
-        "SELECT file_path FROM media.movies WHERE id = $1",
-        id
-    )
-    .fetch_optional(db)
-    .await?;
+async fn video_file_path(db: &kubuno_db::DbPool, id: Uuid) -> Result<Option<String>, sqlx::Error> {
+    let movie: Option<String> = db
+        .fetch_optional_scalar::<String>("SELECT file_path FROM media.movies WHERE id = $1", params![id])
+        .await?;
     if movie.is_some() {
         return Ok(movie);
     }
-    let episode: Option<Option<String>> = sqlx::query_scalar!(
-        r#"SELECT file_path AS "file_path?" FROM media.tv_episodes WHERE id = $1"#,
-        id
-    )
-    .fetch_optional(db)
-    .await?;
+    // `tv_episodes.file_path` is nullable, so the scalar itself is an `Option<String>`
+    // and the row lookup wraps it a second time — flatten "no row" and "row with a
+    // NULL path" into the same `None`.
+    let episode: Option<Option<String>> = db
+        .fetch_optional_scalar::<Option<String>>(
+            "SELECT file_path FROM media.tv_episodes WHERE id = $1",
+            params![id],
+        )
+        .await?;
     Ok(episode.flatten())
 }
 
@@ -169,12 +169,9 @@ pub async fn audio_stream(
     Path(track_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Response, MediaError> {
-    let file_path: Option<String> = sqlx::query_scalar!(
-        "SELECT file_path FROM media.tracks WHERE id = $1",
-        track_id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+    let file_path: Option<String> = state.db
+        .fetch_optional_scalar::<String>("SELECT file_path FROM media.tracks WHERE id = $1", params![track_id])
+        .await?;
 
     let path = file_path
         .ok_or_else(|| MediaError::NotFound(format!("Piste {track_id}")))?;

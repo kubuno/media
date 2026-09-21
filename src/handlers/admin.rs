@@ -1,4 +1,5 @@
 use axum::{extract::{Extension, State}, Json};
+use kubuno_db::{dialect::Assign, params};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -13,21 +14,26 @@ fn require_admin(user: &AuthUser) -> Result<(), MediaError> {
 
 // ── GET /media/admin/settings ─────────────────────────────────────────────────
 
+#[derive(sqlx::FromRow)]
+struct SettingRow {
+    setting_key: String,
+    value:       String,
+}
+
 pub async fn get_settings(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
     require_admin(&user)?;
 
-    let rows = sqlx::query!(
-        "SELECT key, value FROM media.settings ORDER BY key"
-    )
-    .fetch_all(&state.db)
-    .await?;
+    let rows = state.db.fetch_all_as::<SettingRow>(
+        "SELECT setting_key, value FROM media.settings ORDER BY setting_key",
+        params![],
+    ).await?;
 
     let settings: serde_json::Map<String, Value> = rows
         .into_iter()
-        .map(|r| (r.key, Value::String(r.value)))
+        .map(|r| (r.setting_key, Value::String(r.value)))
         .collect();
 
     Ok(Json(Value::Object(settings)))
@@ -52,41 +58,40 @@ pub async fn patch_settings(
 ) -> Result<Json<Value>, MediaError> {
     require_admin(&user)?;
 
+    // `updated_at` is engine-maintained (trigger / ON UPDATE), so the upsert
+    // only ever sets `value`.
+    let clause = state.db.backend().upsert(
+        "media.settings",
+        &["setting_key"],
+        &[Assign::Incoming("value")],
+    );
+
     if let Some(lang) = body.metadata_language {
-        sqlx::query!(
-            "INSERT INTO media.settings (key, value) VALUES ('metadata_language', $1)
-             ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
-            lang,
-        )
-        .execute(&state.db)
-        .await?;
+        let sql = format!(
+            "INSERT INTO media.settings (setting_key, value) VALUES ('metadata_language', $1){clause}"
+        );
+        state.db.execute(&sql, params![lang]).await?;
     }
 
     if let Some(key) = body.tmdb_api_key {
-        sqlx::query!(
-            "INSERT INTO media.settings (key, value) VALUES ('tmdb_api_key', $1)
-             ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
-            key.trim(),
-        )
-        .execute(&state.db)
-        .await?;
+        let sql = format!(
+            "INSERT INTO media.settings (setting_key, value) VALUES ('tmdb_api_key', $1){clause}"
+        );
+        state.db.execute(&sql, params![key.trim()]).await?;
     }
 
     if let Some(key) = body.omdb_api_key {
-        sqlx::query!(
-            "INSERT INTO media.settings (key, value) VALUES ('omdb_api_key', $1)
-             ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
-            key.trim(),
-        )
-        .execute(&state.db)
-        .await?;
+        let sql = format!(
+            "INSERT INTO media.settings (setting_key, value) VALUES ('omdb_api_key', $1){clause}"
+        );
+        state.db.execute(&sql, params![key.trim()]).await?;
     }
 
     Ok(Json(json!({ "ok": true })))
 }
 
 // ── POST /media/admin/enrich ──────────────────────────────────────────────────
-// Remet les films en error_meta → pending_meta et lance l'enrichissement.
+// Puts movies back from error_meta to pending_meta and (re)launches enrichment.
 pub async fn trigger_enrich(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -96,37 +101,25 @@ pub async fn trigger_enrich(
     // Only re-queue items that actually need it (failed or not-yet-enriched).
     // Never touch already-'ready' metadata — a full library re-enrichment is
     // unrequested and risks overwriting good metadata.
-    let reset_movies = sqlx::query(
-        "UPDATE media.movies SET meta_status = 'pending_meta'
-         WHERE meta_status = 'error_meta'",
-    )
-    .execute(&state.db)
-    .await?
-    .rows_affected();
+    let reset_movies = state.db.execute(
+        "UPDATE media.movies SET meta_status = 'pending_meta' WHERE meta_status = 'error_meta'",
+        params![],
+    ).await?;
 
-    let reset_shows = sqlx::query(
-        "UPDATE media.tv_shows SET meta_status = 'pending_meta'
-         WHERE meta_status = 'error_meta'",
-    )
-    .execute(&state.db)
-    .await?
-    .rows_affected();
+    let reset_shows = state.db.execute(
+        "UPDATE media.tv_shows SET meta_status = 'pending_meta' WHERE meta_status = 'error_meta'",
+        params![],
+    ).await?;
 
-    let reset_artists = sqlx::query(
-        "UPDATE media.artists SET meta_status = 'pending_meta'
-         WHERE meta_status = 'error_meta'",
-    )
-    .execute(&state.db)
-    .await?
-    .rows_affected();
+    let reset_artists = state.db.execute(
+        "UPDATE media.artists SET meta_status = 'pending_meta' WHERE meta_status = 'error_meta'",
+        params![],
+    ).await?;
 
-    let reset_albums = sqlx::query(
-        "UPDATE media.albums SET meta_status = 'pending_meta'
-         WHERE meta_status = 'error_meta'",
-    )
-    .execute(&state.db)
-    .await?
-    .rows_affected();
+    let reset_albums = state.db.execute(
+        "UPDATE media.albums SET meta_status = 'pending_meta' WHERE meta_status = 'error_meta'",
+        params![],
+    ).await?;
 
     let count = reset_movies + reset_shows + reset_artists + reset_albums;
 

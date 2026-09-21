@@ -3,6 +3,8 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use chrono::{DateTime, Utc};
+use kubuno_db::params;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -13,20 +15,68 @@ use crate::{
     state::AppState,
 };
 
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+#[derive(sqlx::FromRow)]
+struct PlaylistRow {
+    id:            Uuid,
+    name:          String,
+    description:   Option<String>,
+    cover_path:    Option<String>,
+    playlist_type: String,
+    is_public:     bool,
+    track_count:   i32,
+    duration_secs: i32,
+    created_at:    DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PlaylistDetailRow {
+    id:            Uuid,
+    owner_id:      Uuid,
+    name:          String,
+    description:   Option<String>,
+    cover_path:    Option<String>,
+    playlist_type: String,
+    is_public:     bool,
+    track_count:   i32,
+    duration_secs: i32,
+    created_at:    DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PlaylistTrackRow {
+    id:            Uuid,
+    title:         String,
+    duration_secs: i32,
+    album_id:      Option<Uuid>,
+    album_title:   Option<String>,
+    cover_path:    Option<String>,
+    artist_name:   Option<String>,
+    artist_id:     Option<Uuid>,
+    position:      i32,
+}
+
+/// Track id alone, for the position renumbering in [`remove_track`].
+#[derive(sqlx::FromRow)]
+struct PlaylistTrackIdRow {
+    track_id: Uuid,
+}
+
 pub async fn list_playlists(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
-        r#"SELECT id, name, description, cover_path, playlist_type,
-                  is_public, track_count, duration_secs, created_at
-           FROM media.playlists
-           WHERE owner_id = $1 OR is_public = TRUE
-           ORDER BY created_at DESC"#,
-        user.id
-    )
-    .fetch_all(&state.db)
-    .await?;
+    let rows = state
+        .db
+        .fetch_all_as::<PlaylistRow>(
+            r#"SELECT id, name, description, cover_path, playlist_type,
+                      is_public, track_count, duration_secs, created_at
+               FROM media.playlists
+               WHERE owner_id = $1 OR is_public = TRUE
+               ORDER BY created_at DESC"#,
+            params![user.id],
+        )
+        .await?;
 
     let playlists: Vec<Value> = rows.into_iter().map(|r| json!({
         "id":            r.id,
@@ -48,32 +98,34 @@ pub async fn get_playlist(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let playlist = sqlx::query!(
-        r#"SELECT id, owner_id, name, description, cover_path, playlist_type,
-                  is_public, track_count, duration_secs, created_at
-           FROM media.playlists
-           WHERE id = $1 AND (owner_id = $2 OR is_public = TRUE)"#,
-        id, user.id
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Playlist {id}")))?;
+    let playlist = state
+        .db
+        .fetch_optional_as::<PlaylistDetailRow>(
+            r#"SELECT id, owner_id, name, description, cover_path, playlist_type,
+                      is_public, track_count, duration_secs, created_at
+               FROM media.playlists
+               WHERE id = $1 AND (owner_id = $2 OR is_public = TRUE)"#,
+            params![id, user.id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Playlist {id}")))?;
 
-    let tracks = sqlx::query!(
-        r#"SELECT t.id, t.title, t.duration_secs, t.album_id,
-                  al.title AS album_title, al.cover_path,
-                  ar.name AS artist_name, ar.id AS artist_id,
-                  pt.position
-           FROM media.playlist_tracks pt
-           JOIN media.tracks t ON t.id = pt.track_id
-           LEFT JOIN media.albums al ON al.id = t.album_id
-           LEFT JOIN media.artists ar ON ar.id = t.artist_id
-           WHERE pt.playlist_id = $1
-           ORDER BY pt.position"#,
-        id
-    )
-    .fetch_all(&state.db)
-    .await?;
+    let tracks = state
+        .db
+        .fetch_all_as::<PlaylistTrackRow>(
+            r#"SELECT t.id, t.title, t.duration_secs, t.album_id,
+                      al.title AS album_title, al.cover_path,
+                      ar.name AS artist_name, ar.id AS artist_id,
+                      pt.position
+               FROM media.playlist_tracks pt
+               JOIN media.tracks t ON t.id = pt.track_id
+               LEFT JOIN media.albums al ON al.id = t.album_id
+               LEFT JOIN media.artists ar ON ar.id = t.artist_id
+               WHERE pt.playlist_id = $1
+               ORDER BY pt.position"#,
+            params![id],
+        )
+        .await?;
 
     Ok(Json(json!({
         "id":            playlist.id,
@@ -105,16 +157,15 @@ pub async fn create_playlist(
     Extension(user): Extension<AuthUser>,
     Json(dto): Json<CreatePlaylistDto>,
 ) -> Result<(StatusCode, Json<Value>), MediaError> {
-    let id = sqlx::query_scalar!(
-        r#"INSERT INTO media.playlists (owner_id, name, description, is_public)
-           VALUES ($1, $2, $3, $4) RETURNING id"#,
-        user.id,
-        dto.name,
-        dto.description,
-        dto.is_public.unwrap_or(false),
-    )
-    .fetch_one(&state.db)
-    .await?;
+    let id = kubuno_db::new_id();
+    state
+        .db
+        .execute(
+            r#"INSERT INTO media.playlists (id, owner_id, name, description, is_public)
+               VALUES ($1, $2, $3, $4, $5)"#,
+            params![id, user.id, dto.name, dto.description, dto.is_public.unwrap_or(false)],
+        )
+        .await?;
 
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
 }
@@ -125,25 +176,32 @@ pub async fn update_playlist(
     Path(id): Path<Uuid>,
     Json(dto): Json<UpdatePlaylistDto>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
-        r#"UPDATE media.playlists
-           SET name        = COALESCE($3, name),
-               description = COALESCE($4, description),
-               is_public   = COALESCE($5, is_public)
-           WHERE id = $1 AND owner_id = $2
-           RETURNING id"#,
-        id,
-        user.id,
-        dto.name,
-        dto.description,
-        dto.is_public,
-    )
-    .fetch_optional(&state.db)
-    .await?;
+    // `SELECT EXISTS(...)` decodes as a boolean on PostgreSQL only (an integer
+    // on MySQL/SQLite); a presence probe with `LIMIT 1` is portable instead.
+    let exists = state
+        .db
+        .fetch_optional_scalar::<i32>(
+            "SELECT 1 FROM media.playlists WHERE id = $1 AND owner_id = $2 LIMIT 1",
+            params![id, user.id],
+        )
+        .await?
+        .is_some();
 
-    if rows.is_none() {
+    if !exists {
         return Err(MediaError::NotFound(format!("Playlist {id}")));
     }
+
+    state
+        .db
+        .execute(
+            r#"UPDATE media.playlists
+               SET name        = COALESCE($3, name),
+                   description = COALESCE($4, description),
+                   is_public   = COALESCE($5, is_public)
+               WHERE id = $1 AND owner_id = $2"#,
+            params![id, user.id, dto.name, dto.description, dto.is_public],
+        )
+        .await?;
 
     Ok(Json(json!({ "updated": true })))
 }
@@ -153,14 +211,15 @@ pub async fn delete_playlist(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, MediaError> {
-    let result = sqlx::query!(
-        "DELETE FROM media.playlists WHERE id = $1 AND owner_id = $2",
-        id, user.id
-    )
-    .execute(&state.db)
-    .await?;
+    let rows_affected = state
+        .db
+        .execute(
+            "DELETE FROM media.playlists WHERE id = $1 AND owner_id = $2",
+            params![id, user.id],
+        )
+        .await?;
 
-    if result.rows_affected() == 0 {
+    if rows_affected == 0 {
         return Err(MediaError::NotFound(format!("Playlist {id}")));
     }
 
@@ -173,53 +232,55 @@ pub async fn add_tracks(
     Path(id): Path<Uuid>,
     Json(dto): Json<AddTracksDto>,
 ) -> Result<Json<Value>, MediaError> {
-    // Verify ownership
-    let exists: bool = sqlx::query_scalar!(
-        "SELECT EXISTS(SELECT 1 FROM media.playlists WHERE id = $1 AND owner_id = $2)",
-        id, user.id
-    )
-    .fetch_one(&state.db)
-    .await?
-    .unwrap_or(false);
+    // Verify ownership. See the note in `update_playlist` about `EXISTS`.
+    let exists = state
+        .db
+        .fetch_optional_scalar::<i32>(
+            "SELECT 1 FROM media.playlists WHERE id = $1 AND owner_id = $2 LIMIT 1",
+            params![id, user.id],
+        )
+        .await?
+        .is_some();
 
     if !exists {
         return Err(MediaError::NotFound(format!("Playlist {id}")));
     }
 
     // Get current max position
-    let max_pos: Option<i32> = sqlx::query_scalar!(
-        "SELECT MAX(position) FROM media.playlist_tracks WHERE playlist_id = $1",
-        id
-    )
-    .fetch_one(&state.db)
-    .await?;
+    let max_pos: Option<i32> = state
+        .db
+        .fetch_scalar(
+            "SELECT MAX(position) FROM media.playlist_tracks WHERE playlist_id = $1",
+            params![id],
+        )
+        .await?;
 
     let base_pos = max_pos.unwrap_or(0) + 1;
 
+    let insert_sql = format!(
+        "INSERT {}INTO media.playlist_tracks (playlist_id, track_id, position, added_by) VALUES ($1, $2, $3, $4){}",
+        state.db.backend().insert_ignore_prefix(),
+        state.db.backend().on_conflict_do_nothing(&["playlist_id", "track_id"]),
+    );
     for (offset, track_id) in dto.track_ids.iter().enumerate() {
         let pos = base_pos + offset as i32;
-        sqlx::query!(
-            "INSERT INTO media.playlist_tracks (playlist_id, track_id, position, added_by)
-             VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-            id, track_id, pos, user.id
-        )
-        .execute(&state.db)
-        .await?;
+        state.db.execute(&insert_sql, params![id, track_id, pos, user.id]).await?;
     }
 
     // Refresh track_count and duration_secs
-    sqlx::query!(
-        r#"UPDATE media.playlists
-           SET track_count   = (SELECT COUNT(*) FROM media.playlist_tracks WHERE playlist_id = $1),
-               duration_secs = (SELECT COALESCE(SUM(t.duration_secs), 0)
-                                FROM media.playlist_tracks pt
-                                JOIN media.tracks t ON t.id = pt.track_id
-                                WHERE pt.playlist_id = $1)
-           WHERE id = $1"#,
-        id
-    )
-    .execute(&state.db)
-    .await?;
+    state
+        .db
+        .execute(
+            r#"UPDATE media.playlists
+               SET track_count   = (SELECT COUNT(*) FROM media.playlist_tracks WHERE playlist_id = $1),
+                   duration_secs = (SELECT COALESCE(SUM(t.duration_secs), 0)
+                                    FROM media.playlist_tracks pt
+                                    JOIN media.tracks t ON t.id = pt.track_id
+                                    WHERE pt.playlist_id = $1)
+               WHERE id = $1"#,
+            params![id],
+        )
+        .await?;
 
     Ok(Json(json!({ "added": dto.track_ids.len() })))
 }
@@ -229,52 +290,65 @@ pub async fn remove_track(
     Extension(user): Extension<AuthUser>,
     Path((id, track_id)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, MediaError> {
-    // Verify ownership
-    let exists: bool = sqlx::query_scalar!(
-        "SELECT EXISTS(SELECT 1 FROM media.playlists WHERE id = $1 AND owner_id = $2)",
-        id, user.id
-    )
-    .fetch_one(&state.db)
-    .await?
-    .unwrap_or(false);
+    // Verify ownership. See the note in `update_playlist` about `EXISTS`.
+    let exists = state
+        .db
+        .fetch_optional_scalar::<i32>(
+            "SELECT 1 FROM media.playlists WHERE id = $1 AND owner_id = $2 LIMIT 1",
+            params![id, user.id],
+        )
+        .await?
+        .is_some();
 
     if !exists {
         return Err(MediaError::NotFound(format!("Playlist {id}")));
     }
 
-    sqlx::query!(
-        "DELETE FROM media.playlist_tracks WHERE playlist_id = $1 AND track_id = $2",
-        id, track_id
-    )
-    .execute(&state.db)
-    .await?;
+    state
+        .db
+        .execute(
+            "DELETE FROM media.playlist_tracks WHERE playlist_id = $1 AND track_id = $2",
+            params![id, track_id],
+        )
+        .await?;
 
-    // Reorder positions
-    sqlx::query!(
-        r#"WITH ranked AS (
-               SELECT ctid, ROW_NUMBER() OVER (ORDER BY position) AS rn
-               FROM media.playlist_tracks WHERE playlist_id = $1
-           )
-           UPDATE media.playlist_tracks pt SET position = r.rn
-           FROM ranked r WHERE pt.ctid = r.ctid"#,
-        id
-    )
-    .execute(&state.db)
-    .await?;
+    // Reorder positions to close the gap left by the deleted track. The
+    // original query keyed a window function on the physical row id
+    // (PostgreSQL's `ctid`), which has no equivalent on MySQL/SQLite; the
+    // table's primary key is (playlist_id, track_id), so the remaining rows
+    // are fetched in position order and renumbered one by one instead.
+    let remaining = state
+        .db
+        .fetch_all_as::<PlaylistTrackIdRow>(
+            "SELECT track_id FROM media.playlist_tracks WHERE playlist_id = $1 ORDER BY position",
+            params![id],
+        )
+        .await?;
+
+    for (idx, row) in remaining.iter().enumerate() {
+        state
+            .db
+            .execute(
+                "UPDATE media.playlist_tracks SET position = $1 WHERE playlist_id = $2 AND track_id = $3",
+                params![(idx as i32) + 1, id, row.track_id],
+            )
+            .await?;
+    }
 
     // Refresh counts
-    sqlx::query!(
-        r#"UPDATE media.playlists
-           SET track_count   = (SELECT COUNT(*) FROM media.playlist_tracks WHERE playlist_id = $1),
-               duration_secs = (SELECT COALESCE(SUM(t.duration_secs), 0)
-                                FROM media.playlist_tracks pt
-                                JOIN media.tracks t ON t.id = pt.track_id
-                                WHERE pt.playlist_id = $1)
-           WHERE id = $1"#,
-        id
-    )
-    .execute(&state.db)
-    .await?;
+    state
+        .db
+        .execute(
+            r#"UPDATE media.playlists
+               SET track_count   = (SELECT COUNT(*) FROM media.playlist_tracks WHERE playlist_id = $1),
+                   duration_secs = (SELECT COALESCE(SUM(t.duration_secs), 0)
+                                    FROM media.playlist_tracks pt
+                                    JOIN media.tracks t ON t.id = pt.track_id
+                                    WHERE pt.playlist_id = $1)
+               WHERE id = $1"#,
+            params![id],
+        )
+        .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

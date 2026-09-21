@@ -2,21 +2,74 @@ use axum::{
     extract::{Extension, Path, State},
     Json,
 };
+use kubuno_db::params;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::{errors::MediaError, middleware::auth::AuthUser, state::AppState};
 
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+#[derive(sqlx::FromRow)]
+struct ArtistListRow {
+    id:          Uuid,
+    name:        String,
+    sort_name:   Option<String>,
+    image_path:  Option<String>,
+    #[sqlx(json)]
+    genres:      Vec<String>,
+    album_count: i32,
+    track_count: i32,
+}
+
+#[derive(sqlx::FromRow)]
+#[allow(dead_code)] // over-selects; some columns decoded but unused here
+struct ArtistDetailRow {
+    id:          Uuid,
+    name:        String,
+    sort_name:   Option<String>,
+    biography:   Option<String>,
+    image_path:  Option<String>,
+    #[sqlx(json)]
+    genres:      Vec<String>,
+    country:     Option<String>,
+    artist_type: Option<String>,
+    album_count: i32,
+    track_count: i32,
+    mbid:        Option<String>,
+    begin_date:  Option<chrono::NaiveDate>,
+    end_date:    Option<chrono::NaiveDate>,
+    meta_status: String,
+    meta_locked: bool,
+}
+
+#[derive(sqlx::FromRow)]
+struct ArtistAlbumRow {
+    id:           Uuid,
+    title:        String,
+    release_year: Option<i32>,
+    cover_path:   Option<String>,
+    album_type:   String,
+    track_count:  i32,
+}
+
+#[derive(sqlx::FromRow)]
+struct ArtistTopTrackRow {
+    id:            Uuid,
+    title:         String,
+    duration_secs: i32,
+    play_count:    i32,
+    album_id:      Option<Uuid>,
+}
+
 pub async fn list_artists(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
+    let rows = state.db.fetch_all_as::<ArtistListRow>(
         r#"SELECT id, name, sort_name, image_path, genres, album_count, track_count
-           FROM media.artists ORDER BY COALESCE(sort_name, name)"#
-    )
-    .fetch_all(&state.db)
-    .await?;
+           FROM media.artists ORDER BY COALESCE(sort_name, name)"#,
+        params![],
+    ).await?;
 
     // Backfill missing artist photos from Deezer in the background so the grid
     // fills in on a later load without blocking this response.
@@ -31,11 +84,10 @@ pub async fn list_artists(
         tokio::spawn(async move {
             for (id, name) in missing {
                 if let Some(url) = crate::services::deezer::artist_image(&name).await {
-                    let _ = sqlx::query("UPDATE media.artists SET image_path = $1 WHERE id = $2 AND image_path IS NULL")
-                        .bind(&url)
-                        .bind(id)
-                        .execute(&db)
-                        .await;
+                    let _ = db.execute(
+                        "UPDATE media.artists SET image_path = $1 WHERE id = $2 AND image_path IS NULL",
+                        params![url, id],
+                    ).await;
                 }
             }
         });
@@ -59,42 +111,35 @@ pub async fn get_artist(
     Extension(_user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let artist = sqlx::query!(
+    let artist = state.db.fetch_optional_as::<ArtistDetailRow>(
         r#"SELECT id, name, sort_name, biography, image_path, genres,
                   country, artist_type, album_count, track_count,
                   mbid, begin_date, end_date, meta_status, meta_locked
            FROM media.artists WHERE id = $1"#,
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?
+        params![id],
+    ).await?
     .ok_or_else(|| MediaError::NotFound(format!("Artiste {id}")))?;
 
-    let albums = sqlx::query!(
+    let albums = state.db.fetch_all_as::<ArtistAlbumRow>(
         r#"SELECT id, title, release_year, cover_path, album_type, track_count
            FROM media.albums WHERE artist_id = $1 ORDER BY release_year DESC NULLS LAST"#,
-        id
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![id],
+    ).await?;
 
-    let top_tracks = sqlx::query!(
+    let top_tracks = state.db.fetch_all_as::<ArtistTopTrackRow>(
         r#"SELECT id, title, duration_secs, play_count, album_id
            FROM media.tracks WHERE artist_id = $1 ORDER BY play_count DESC LIMIT 10"#,
-        id
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![id],
+    ).await?;
 
     // No local photo? Fetch one from Deezer (free, key-less) and cache it.
     let mut image_path = artist.image_path.clone();
     if image_path.is_none() {
         if let Some(url) = crate::services::deezer::artist_image(&artist.name).await {
-            let _ = sqlx::query("UPDATE media.artists SET image_path = $1 WHERE id = $2")
-                .bind(&url)
-                .bind(id)
-                .execute(&state.db)
-                .await;
+            let _ = state.db.execute(
+                "UPDATE media.artists SET image_path = $1 WHERE id = $2",
+                params![url.clone(), id],
+            ).await;
             image_path = Some(url);
         }
     }

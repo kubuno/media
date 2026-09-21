@@ -2,6 +2,8 @@ use axum::{
     extract::{Extension, Path, State},
     Json,
 };
+use chrono::{DateTime, Utc};
+use kubuno_db::{dialect::{Assign, SqlType}, params};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -28,29 +30,41 @@ pub async fn save_video_progress(
         0
     };
     let is_watched = percent >= 90;
+    let now = Utc::now();
 
-    sqlx::query!(
+    // `last_played_at` is bound as a Rust timestamp (never `NOW()` in SQL) so
+    // the insert and the update branch agree on the exact same instant.
+    let clause = state.db.backend().upsert(
+        "media.video_progress",
+        &["user_id", "item_type", "item_id"],
+        &[
+            Assign::Incoming("position_secs"),
+            Assign::Incoming("duration_secs"),
+            Assign::Incoming("percent_played"),
+            Assign::Incoming("is_watched"),
+            Assign::Incoming("last_played_at"),
+        ],
+    );
+    let sql = format!(
         r#"INSERT INTO media.video_progress
-               (user_id, item_type, item_id, position_secs, duration_secs, percent_played, is_watched)
-           VALUES ($1, $2, $3, $4, $5, $6::NUMERIC, $7)
-           ON CONFLICT (user_id, item_type, item_id) DO UPDATE
-               SET position_secs  = EXCLUDED.position_secs,
-                   duration_secs  = EXCLUDED.duration_secs,
-                   percent_played = EXCLUDED.percent_played,
-                   is_watched     = EXCLUDED.is_watched,
-                   last_played_at = NOW()"#,
-        user.id,
-        item_type,
-        item_id,
-        dto.position_secs,
-        dto.duration_secs,
-        percent as f64,
-        is_watched,
-    )
-    .execute(&state.db)
-    .await?;
+               (user_id, item_type, item_id, position_secs, duration_secs, percent_played, is_watched, last_played_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8){clause}"#
+    );
+    state.db.execute(
+        &sql,
+        params![user.id, item_type, item_id, dto.position_secs, dto.duration_secs, percent as f64, is_watched, now],
+    ).await?;
 
     Ok(Json(json!({ "saved": true, "is_watched": is_watched })))
+}
+
+#[derive(sqlx::FromRow)]
+struct ProgressRow {
+    position_secs:   i32,
+    duration_secs:   i32,
+    percent_played:  f64,
+    is_watched:      bool,
+    last_played_at:  DateTime<Utc>,
 }
 
 pub async fn get_video_progress(
@@ -58,14 +72,13 @@ pub async fn get_video_progress(
     Extension(user): Extension<AuthUser>,
     Path((item_type, item_id)): Path<(String, Uuid)>,
 ) -> Result<Json<Value>, MediaError> {
-    let row = sqlx::query!(
-        r#"SELECT position_secs, duration_secs, percent_played::FLOAT8, is_watched, last_played_at
+    let percent_played = state.db.backend().cast("percent_played", SqlType::Double);
+    let sql = format!(
+        r#"SELECT position_secs, duration_secs, {percent_played} AS percent_played, is_watched, last_played_at
            FROM media.video_progress
-           WHERE user_id = $1 AND item_type = $2 AND item_id = $3"#,
-        user.id, item_type, item_id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+           WHERE user_id = $1 AND item_type = $2 AND item_id = $3"#
+    );
+    let row = state.db.fetch_optional_as::<ProgressRow>(&sql, params![user.id, item_type, item_id]).await?;
 
     match row {
         Some(r) => Ok(Json(json!({
@@ -90,16 +103,11 @@ pub async fn record_listen(
     Extension(user): Extension<AuthUser>,
     Json(dto): Json<RecordListenDto>,
 ) -> Result<Json<Value>, MediaError> {
-    sqlx::query!(
+    state.db.execute(
         r#"INSERT INTO media.listen_history (user_id, track_id, listened_secs, is_complete)
            VALUES ($1, $2, $3, $4)"#,
-        user.id,
-        dto.track_id,
-        dto.listened_secs,
-        dto.listened_secs > 0,
-    )
-    .execute(&state.db)
-    .await?;
+        params![user.id, dto.track_id, dto.listened_secs, dto.listened_secs > 0],
+    ).await?;
 
     // Increment play_count
     super::tracks::increment_play_count(dto.track_id, &state.db).await;
@@ -107,11 +115,23 @@ pub async fn record_listen(
     Ok(Json(json!({ "recorded": true })))
 }
 
+#[derive(sqlx::FromRow)]
+struct ListenHistoryRow {
+    id:            Uuid,
+    track_id:      Uuid,
+    listened_secs: i32,
+    is_complete:   bool,
+    played_at:     DateTime<Utc>,
+    title:         String,
+    artist_name:   Option<String>,
+    album_title:   Option<String>,
+}
+
 pub async fn get_listen_history(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    let rows = sqlx::query!(
+    let rows = state.db.fetch_all_as::<ListenHistoryRow>(
         r#"SELECT lh.id, lh.track_id, lh.listened_secs, lh.is_complete, lh.played_at,
                   t.title, ar.name AS artist_name, al.title AS album_title
            FROM media.listen_history lh
@@ -121,10 +141,8 @@ pub async fn get_listen_history(
            WHERE lh.user_id = $1
            ORDER BY lh.played_at DESC
            LIMIT 100"#,
-        user.id
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![user.id],
+    ).await?;
 
     let history: Vec<Value> = rows.into_iter().map(|r| json!({
         "id":            r.id,

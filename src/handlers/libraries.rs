@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use kubuno_db::params;
 use kubuno_storage::path::user_folder_dir;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -15,25 +16,66 @@ use crate::{
     workers::scan,
 };
 
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+#[derive(sqlx::FromRow)]
+struct FilesFolderRow {
+    id:                 Uuid,
+    owner_id:           Uuid,
+    path:               String,
+    name:               String,
+    owner_email:        String,
+    owner_display_name: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct LibraryPathType {
+    path:     String,
+    lib_type: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct LibraryScanRow {
+    id:       Uuid,
+    path:     String,
+    lib_type: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct ScanStatusRow {
+    status:          String,
+    files_found:     i32,
+    files_processed: i32,
+    files_added:     i32,
+    error_message:   Option<String>,
+}
+
+const LIBRARY_COLUMNS: &str = r#"id, owner_id, name, lib_type, path, icon, color,
+                  is_shared, item_count, last_scan_at, scan_status,
+                  scan_error, source_type, files_folder_id, files_owner_id,
+                  created_at, updated_at"#;
+
 pub async fn list_libraries(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<Value>, MediaError> {
-    // Runtime query (not query_as!) so the new `shared_user_ids` column does not
-    // force a `.sqlx` cache regen. A user sees a library if it is public
-    // (is_shared), owned by them, or explicitly shared with them.
-    let rows = sqlx::query_as::<_, MediaLibraryFull>(
+    // A user sees a library if it is public (is_shared), owned by them, or
+    // explicitly shared with them. `shared_user_ids` is now a JSON column, so
+    // the old `$1 = ANY(shared_user_ids)` becomes a portable containment test;
+    // the candidate id is bound as TEXT.
+    let shared_frag = state.db.backend().json_array_contains("shared_user_ids", 2);
+    let sql = format!(
         r#"SELECT id, owner_id, name, lib_type, path, icon, color,
                   is_shared, item_count, last_scan_at, scan_status,
                   scan_error, source_type, files_folder_id, files_owner_id,
                   shared_user_ids, created_at, updated_at
            FROM media.libraries
-           WHERE is_shared = TRUE OR owner_id = $1 OR $1 = ANY(shared_user_ids)
-           ORDER BY name"#,
-    )
-    .bind(user.id)
-    .fetch_all(&state.db)
-    .await?;
+           WHERE is_shared = TRUE OR owner_id = $1 OR {shared_frag}
+           ORDER BY name"#
+    );
+    let rows = state
+        .db
+        .fetch_all_as::<MediaLibraryFull>(&sql, params![user.id, user.id.to_string()])
+        .await?;
     Ok(Json(json!({ "libraries": rows })))
 }
 
@@ -44,22 +86,27 @@ pub async fn set_library_shares(
     Path(id): Path<Uuid>,
     Json(dto): Json<SetLibrarySharesDto>,
 ) -> Result<Json<Value>, MediaError> {
-    let owner: Option<Uuid> = sqlx::query_scalar::<_, Option<Uuid>>(
-        "SELECT owner_id FROM media.libraries WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Bibliothèque {id}")))?;
+    let owner: Option<Uuid> = state
+        .db
+        .fetch_optional_scalar::<Option<Uuid>>(
+            "SELECT owner_id FROM media.libraries WHERE id = $1",
+            params![id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Bibliothèque {id}")))?;
 
     if user.role != "admin" && owner != Some(user.id) {
         return Err(MediaError::Forbidden);
     }
 
-    sqlx::query("UPDATE media.libraries SET shared_user_ids = $2, updated_at = NOW() WHERE id = $1")
-        .bind(id)
-        .bind(&dto.user_ids)
-        .execute(&state.db)
+    // `shared_user_ids` is JSON now: bind the Vec<Uuid> directly, it encodes
+    // as a JSON array. updated_at is maintained by the engine.
+    state
+        .db
+        .execute(
+            "UPDATE media.libraries SET shared_user_ids = $2 WHERE id = $1",
+            params![id, dto.user_ids.clone()],
+        )
         .await?;
 
     Ok(Json(json!({ "shared_user_ids": dto.user_ids })))
@@ -87,63 +134,78 @@ pub async fn create_library(
         let base = state.settings.storage.files_storage_base.as_deref()
             .ok_or_else(|| MediaError::Validation("storage.files_storage_base non configuré sur ce serveur".into()))?;
 
-        let folder_path: String = sqlx::query_scalar!(
-            "SELECT path FROM drive.folders WHERE id = $1 AND owner_id = $2",
-            folder_id,
-            owner_id,
-        )
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(|| MediaError::NotFound(format!("Dossier files {folder_id}")))?;
+        let folder_path: String = state
+            .db
+            .fetch_optional_scalar::<String>(
+                "SELECT path FROM drive.folders WHERE id = $1 AND owner_id = $2",
+                params![folder_id, owner_id],
+            )
+            .await?
+            .ok_or_else(|| MediaError::NotFound(format!("Dossier files {folder_id}")))?;
 
         let rel = user_folder_dir(owner_id, &folder_path);
         let resolved = format!("{}/{}", base.trim_end_matches('/'), rel.to_string_lossy());
 
-        sqlx::query_as!(
-            MediaLibrary,
-            r#"INSERT INTO media.libraries
-               (owner_id, name, lib_type, path, icon, color, is_shared,
-                source_type, files_folder_id, files_owner_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,'files_folder',$8,$9)
-               RETURNING id, owner_id, name, lib_type, path, icon, color,
-                         is_shared, item_count, last_scan_at, scan_status,
-                         scan_error, source_type, files_folder_id, files_owner_id,
-                         created_at, updated_at"#,
-            user.id,
-            dto.name,
-            dto.lib_type,
-            resolved,
-            dto.icon.as_deref().unwrap_or("🎵"),
-            dto.color.as_deref().unwrap_or("#1a73e8"),
-            dto.is_shared.unwrap_or(true),
-            folder_id,
-            owner_id,
-        )
-        .fetch_one(&state.db)
-        .await?
+        // No RETURNING for the insert: mint the id in Rust, then reselect.
+        let id = kubuno_db::new_id();
+        state
+            .db
+            .execute(
+                r#"INSERT INTO media.libraries
+                   (id, owner_id, name, lib_type, path, icon, color, is_shared,
+                    source_type, files_folder_id, files_owner_id)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'files_folder',$9,$10)"#,
+                params![
+                    id,
+                    user.id,
+                    dto.name,
+                    dto.lib_type,
+                    resolved,
+                    dto.icon.as_deref().unwrap_or("🎵"),
+                    dto.color.as_deref().unwrap_or("#1a73e8"),
+                    dto.is_shared.unwrap_or(true),
+                    folder_id,
+                    owner_id,
+                ],
+            )
+            .await?;
+        state
+            .db
+            .fetch_one_as::<MediaLibrary>(
+                &format!("SELECT {LIBRARY_COLUMNS} FROM media.libraries WHERE id = $1"),
+                params![id],
+            )
+            .await?
     } else {
         let path = dto.path
             .filter(|p| !p.is_empty())
             .ok_or_else(|| MediaError::Validation("path requis pour source filesystem".into()))?;
 
-        sqlx::query_as!(
-            MediaLibrary,
-            r#"INSERT INTO media.libraries (owner_id, name, lib_type, path, icon, color, is_shared)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)
-               RETURNING id, owner_id, name, lib_type, path, icon, color,
-                         is_shared, item_count, last_scan_at, scan_status,
-                         scan_error, source_type, files_folder_id, files_owner_id,
-                         created_at, updated_at"#,
-            user.id,
-            dto.name,
-            dto.lib_type,
-            path,
-            dto.icon.as_deref().unwrap_or("🎬"),
-            dto.color.as_deref().unwrap_or("#1a73e8"),
-            dto.is_shared.unwrap_or(true),
-        )
-        .fetch_one(&state.db)
-        .await?
+        let id = kubuno_db::new_id();
+        state
+            .db
+            .execute(
+                "INSERT INTO media.libraries (id, owner_id, name, lib_type, path, icon, color, is_shared)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+                params![
+                    id,
+                    user.id,
+                    dto.name,
+                    dto.lib_type,
+                    path,
+                    dto.icon.as_deref().unwrap_or("🎬"),
+                    dto.color.as_deref().unwrap_or("#1a73e8"),
+                    dto.is_shared.unwrap_or(true),
+                ],
+            )
+            .await?;
+        state
+            .db
+            .fetch_one_as::<MediaLibrary>(
+                &format!("SELECT {LIBRARY_COLUMNS} FROM media.libraries WHERE id = $1"),
+                params![id],
+            )
+            .await?
     };
 
     Ok((StatusCode::CREATED, Json(json!(row))))
@@ -158,29 +220,28 @@ pub async fn update_library(
     if user.role != "admin" {
         return Err(MediaError::Forbidden);
     }
-    let row = sqlx::query_as!(
-        MediaLibrary,
-        r#"UPDATE media.libraries
-           SET name      = COALESCE($2, name),
-               path      = COALESCE($3, path),
-               icon      = COALESCE($4, icon),
-               color     = COALESCE($5, color),
-               is_shared = COALESCE($6, is_shared)
-           WHERE id = $1
-           RETURNING id, owner_id, name, lib_type, path, icon, color,
-                     is_shared, item_count, last_scan_at, scan_status,
-                     scan_error, source_type, files_folder_id, files_owner_id,
-                     created_at, updated_at"#,
-        id,
-        dto.name,
-        dto.path,
-        dto.icon,
-        dto.color,
-        dto.is_shared,
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Bibliothèque {id}")))?;
+    // No RETURNING: update, then reselect. updated_at is maintained by the engine.
+    state
+        .db
+        .execute(
+            r#"UPDATE media.libraries
+               SET name      = COALESCE($2, name),
+                   path      = COALESCE($3, path),
+                   icon      = COALESCE($4, icon),
+                   color     = COALESCE($5, color),
+                   is_shared = COALESCE($6, is_shared)
+               WHERE id = $1"#,
+            params![id, dto.name, dto.path, dto.icon, dto.color, dto.is_shared],
+        )
+        .await?;
+    let row = state
+        .db
+        .fetch_optional_as::<MediaLibrary>(
+            &format!("SELECT {LIBRARY_COLUMNS} FROM media.libraries WHERE id = $1"),
+            params![id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Bibliothèque {id}")))?;
     Ok(Json(json!(row)))
 }
 
@@ -193,16 +254,18 @@ pub async fn list_files_folders(
     if user.role != "admin" {
         return Err(MediaError::Forbidden);
     }
-    let rows = sqlx::query!(
-        r#"SELECT f.id, f.owner_id, f.path, f.name,
-                  u.email        AS owner_email,
-                  u.display_name AS owner_display_name
-           FROM drive.folders f
-           JOIN core.users u ON u.id = f.owner_id
-           ORDER BY u.email, f.path"#
-    )
-    .fetch_all(&state.db)
-    .await?;
+    let rows = state
+        .db
+        .fetch_all_as::<FilesFolderRow>(
+            r#"SELECT f.id, f.owner_id, f.path, f.name,
+                      u.email        AS owner_email,
+                      u.display_name AS owner_display_name
+               FROM drive.folders f
+               JOIN core.users u ON u.id = f.owner_id
+               ORDER BY u.email, f.path"#,
+            params![],
+        )
+        .await?;
 
     let folders: Vec<_> = rows.iter().map(|r| json!({
         "id":                 r.id,
@@ -228,24 +291,21 @@ pub async fn delete_library(
     let mut tx = state.db.begin().await?;
 
     // Explicitly remove music tracks from this library (FK is SET NULL, not CASCADE)
-    sqlx::query!("DELETE FROM media.tracks WHERE library_id = $1", id)
-        .execute(&mut *tx)
-        .await?;
+    tx.execute("DELETE FROM media.tracks WHERE library_id = $1", params![id]).await?;
 
     // Clean up albums from this library that have no remaining tracks
-    sqlx::query!(
+    tx.execute(
         r#"DELETE FROM media.albums
            WHERE library_id = $1
            AND id NOT IN (
                SELECT DISTINCT album_id FROM media.tracks WHERE album_id IS NOT NULL
            )"#,
-        id
+        params![id],
     )
-    .execute(&mut *tx)
     .await?;
 
     // Clean up artists from this library that have no remaining tracks or albums
-    sqlx::query!(
+    tx.execute(
         r#"DELETE FROM media.artists
            WHERE library_id = $1
            AND id NOT IN (
@@ -253,15 +313,12 @@ pub async fn delete_library(
                UNION
                SELECT DISTINCT artist_id FROM media.albums WHERE artist_id IS NOT NULL
            )"#,
-        id
+        params![id],
     )
-    .execute(&mut *tx)
     .await?;
 
     // Delete the library; movies/shows/episodes cascade automatically
-    sqlx::query!("DELETE FROM media.libraries WHERE id = $1", id)
-        .execute(&mut *tx)
-        .await?;
+    tx.execute("DELETE FROM media.libraries WHERE id = $1", params![id]).await?;
 
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -275,13 +332,14 @@ pub async fn start_scan(
     if user.role != "admin" {
         return Err(MediaError::Forbidden);
     }
-    let lib = sqlx::query!(
-        "SELECT path, lib_type FROM media.libraries WHERE id = $1",
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| MediaError::NotFound(format!("Bibliothèque {id}")))?;
+    let lib = state
+        .db
+        .fetch_optional_as::<LibraryPathType>(
+            "SELECT path, lib_type FROM media.libraries WHERE id = $1",
+            params![id],
+        )
+        .await?
+        .ok_or_else(|| MediaError::NotFound(format!("Bibliothèque {id}")))?;
 
     let db2       = state.db.clone();
     let settings2 = state.settings.clone();
@@ -304,11 +362,13 @@ pub async fn scan_all_libraries(
     if user.role != "admin" {
         return Err(MediaError::Forbidden);
     }
-    let libs = sqlx::query!(
-        "SELECT id, path, lib_type FROM media.libraries ORDER BY name"
-    )
-    .fetch_all(&state.db)
-    .await?;
+    let libs = state
+        .db
+        .fetch_all_as::<LibraryScanRow>(
+            "SELECT id, path, lib_type FROM media.libraries ORDER BY name",
+            params![],
+        )
+        .await?;
 
     let count = libs.len();
 
@@ -329,16 +389,17 @@ pub async fn scan_status(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    let job = sqlx::query!(
-        r#"SELECT status, files_found, files_processed, files_added, error_message
-           FROM media.scan_jobs
-           WHERE library_id = $1
-           ORDER BY created_at DESC
-           LIMIT 1"#,
-        id
-    )
-    .fetch_optional(&state.db)
-    .await?;
+    let job = state
+        .db
+        .fetch_optional_as::<ScanStatusRow>(
+            r#"SELECT status, files_found, files_processed, files_added, error_message
+               FROM media.scan_jobs
+               WHERE library_id = $1
+               ORDER BY created_at DESC
+               LIMIT 1"#,
+            params![id],
+        )
+        .await?;
 
     Ok(Json(json!(job.map(|j| json!({
         "status":           j.status,

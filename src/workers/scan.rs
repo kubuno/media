@@ -1,5 +1,6 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use kubuno_db::dialect::Assign;
+use kubuno_db::params;
 use uuid::Uuid;
 
 use crate::services::{covers, ffprobe, nfo, scanner};
@@ -10,7 +11,7 @@ use std::sync::Arc;
 // ── Artist / Album resolution helpers ────────────────────────────────────────
 
 async fn resolve_artist(
-    db:        &PgPool,
+    db:        &kubuno_db::DbPool,
     lib_id:    Uuid,
     name:      &str,
     cache:     &mut HashMap<String, Uuid>,
@@ -19,31 +20,32 @@ async fn resolve_artist(
     if let Some(&id) = cache.get(&key) {
         return Ok(id);
     }
-    let existing: Option<Uuid> = sqlx::query_scalar!(
-        "SELECT id FROM media.artists WHERE library_id = $1 AND lower(name) = lower($2) LIMIT 1",
-        lib_id, name
-    )
-    .fetch_optional(db)
-    .await?;
+    let existing = db
+        .fetch_optional_scalar::<Uuid>(
+            "SELECT id FROM media.artists WHERE library_id = $1 AND lower(name) = lower($2) LIMIT 1",
+            params![lib_id, name],
+        )
+        .await?;
 
+    // The SELECT above already guards against duplicates, so a plain INSERT is
+    // enough here — no ON CONFLICT / RETURNING needed.
     let id = if let Some(id) = existing {
         id
     } else {
-        sqlx::query_scalar!(
-            r#"INSERT INTO media.artists (library_id, name) VALUES ($1, $2)
-               ON CONFLICT (library_id, lower(name)) DO UPDATE SET name = EXCLUDED.name
-               RETURNING id"#,
-            lib_id, name
+        let id = kubuno_db::new_id();
+        db.execute(
+            "INSERT INTO media.artists (id, library_id, name) VALUES ($1,$2,$3)",
+            params![id, lib_id, name],
         )
-        .fetch_one(db)
-        .await?
+        .await?;
+        id
     };
     cache.insert(key, id);
     Ok(id)
 }
 
 async fn resolve_album(
-    db:        &PgPool,
+    db:        &kubuno_db::DbPool,
     lib_id:    Uuid,
     title:     &str,
     artist_id: Option<Uuid>,
@@ -53,70 +55,68 @@ async fn resolve_album(
     if let Some(&id) = cache.get(&key) {
         return Ok(id);
     }
-    let existing: Option<Uuid> = match artist_id {
-        Some(aid) => sqlx::query_scalar!(
+    let existing = match artist_id {
+        Some(aid) => db.fetch_optional_scalar::<Uuid>(
             "SELECT id FROM media.albums WHERE library_id=$1 AND artist_id=$2 AND lower(title)=lower($3) LIMIT 1",
-            lib_id, aid, title
-        ).fetch_optional(db).await?,
-        None => sqlx::query_scalar!(
+            params![lib_id, aid, title],
+        ).await?,
+        None => db.fetch_optional_scalar::<Uuid>(
             "SELECT id FROM media.albums WHERE library_id=$1 AND artist_id IS NULL AND lower(title)=lower($2) LIMIT 1",
-            lib_id, title
-        ).fetch_optional(db).await?,
+            params![lib_id, title],
+        ).await?,
     };
 
+    // Same guard as `resolve_artist`: the SELECT already de-duplicates, so a
+    // plain INSERT (no functional-index ON CONFLICT) is correct here.
     let id = if let Some(id) = existing {
         id
     } else {
+        let id = kubuno_db::new_id();
         match artist_id {
-            Some(aid) => sqlx::query_scalar!(
-                r#"INSERT INTO media.albums (library_id, artist_id, title) VALUES ($1,$2,$3)
-                   ON CONFLICT (library_id, artist_id, lower(title))
-                       WHERE artist_id IS NOT NULL
-                   DO UPDATE SET title = EXCLUDED.title
-                   RETURNING id"#,
-                lib_id, aid, title
-            ).fetch_one(db).await?,
-            None => sqlx::query_scalar!(
-                r#"INSERT INTO media.albums (library_id, artist_id, title) VALUES ($1, NULL, $2)
-                   ON CONFLICT (library_id, lower(title))
-                       WHERE artist_id IS NULL
-                   DO UPDATE SET title = EXCLUDED.title
-                   RETURNING id"#,
-                lib_id, title
-            ).fetch_one(db).await?,
+            Some(aid) => {
+                db.execute(
+                    "INSERT INTO media.albums (id, library_id, artist_id, title) VALUES ($1,$2,$3,$4)",
+                    params![id, lib_id, aid, title],
+                ).await?;
+            }
+            None => {
+                db.execute(
+                    "INSERT INTO media.albums (id, library_id, artist_id, title) VALUES ($1,$2,$3,$4)",
+                    params![id, lib_id, None::<Uuid>, title],
+                ).await?;
+            }
         }
+        id
     };
     cache.insert(key, id);
     Ok(id)
 }
 
-async fn refresh_audio_counts(db: &PgPool, library_id: Uuid) -> Result<()> {
-    sqlx::query!(
+async fn refresh_audio_counts(db: &kubuno_db::DbPool, library_id: Uuid) -> Result<()> {
+    db.execute(
         r#"UPDATE media.artists
            SET track_count = (SELECT COUNT(*) FROM media.tracks WHERE artist_id = media.artists.id),
                album_count = (SELECT COUNT(DISTINCT album_id) FROM media.tracks
                               WHERE artist_id = media.artists.id AND album_id IS NOT NULL)
            WHERE library_id = $1"#,
-        library_id
+        params![library_id],
     )
-    .execute(db)
     .await?;
 
-    sqlx::query!(
+    db.execute(
         r#"UPDATE media.albums
            SET track_count   = (SELECT COUNT(*)    FROM media.tracks WHERE album_id = media.albums.id),
                duration_secs = COALESCE((SELECT SUM(duration_secs) FROM media.tracks WHERE album_id = media.albums.id), 0)
            WHERE library_id = $1"#,
-        library_id
+        params![library_id],
     )
-    .execute(db)
     .await?;
 
     Ok(())
 }
 
 pub async fn run_scan(
-    db:           &PgPool,
+    db:           &kubuno_db::DbPool,
     settings:     &Arc<Settings>,
     library_id:   Uuid,
     library_path: &str,
@@ -124,30 +124,27 @@ pub async fn run_scan(
 ) -> Result<()> {
     let path = std::path::Path::new(library_path);
     if !path.exists() {
-        sqlx::query!(
-            "UPDATE media.libraries SET scan_status = 'error', scan_error = $2 WHERE id = $1",
-            library_id,
-            "Dossier introuvable"
+        // Placeholders must appear in ascending order in the query text (portable
+        // engines are positional), so the SET value comes before the WHERE id here.
+        db.execute(
+            "UPDATE media.libraries SET scan_status = 'error', scan_error = $1 WHERE id = $2",
+            params!["Dossier introuvable", library_id],
         )
-        .execute(db)
         .await?;
         return Ok(());
     }
 
-    sqlx::query!(
+    db.execute(
         "UPDATE media.libraries SET scan_status = 'scanning', scan_error = NULL WHERE id = $1",
-        library_id
+        params![library_id],
     )
-    .execute(db)
     .await?;
 
-    let job_id: Uuid = sqlx::query_scalar!(
-        r#"INSERT INTO media.scan_jobs (library_id, status, started_at)
-           VALUES ($1, 'running', NOW())
-           RETURNING id"#,
-        library_id
+    let job_id = kubuno_db::new_id();
+    db.execute(
+        "INSERT INTO media.scan_jobs (id, library_id, status, started_at) VALUES ($1,$2,$3,$4)",
+        params![job_id, library_id, "running", chrono::Utc::now()],
     )
-    .fetch_one(db)
     .await?;
 
     let is_audio   = lib_type == "music";
@@ -170,11 +167,10 @@ pub async fn run_scan(
     let files: Vec<_> = scanner::find_files(path, &extensions).collect();
     let total = files.len() as i32;
 
-    sqlx::query!(
-        "UPDATE media.scan_jobs SET files_found = $2 WHERE id = $1",
-        job_id, total
+    db.execute(
+        "UPDATE media.scan_jobs SET files_found = $1 WHERE id = $2",
+        params![total, job_id],
     )
-    .execute(db)
     .await?;
 
     let mut processed = 0i32;
@@ -185,13 +181,13 @@ pub async fn run_scan(
         let file_size = entry.metadata().map(|m| m.len() as i64).unwrap_or(0);
 
         if is_video {
-            let exists: bool = sqlx::query_scalar!(
-                "SELECT EXISTS(SELECT 1 FROM media.movies WHERE file_path = $1)",
-                file_path
-            )
-            .fetch_one(db)
-            .await?
-            .unwrap_or(false);
+            let exists = db
+                .fetch_optional_scalar::<Uuid>(
+                    "SELECT id FROM media.movies WHERE file_path = $1",
+                    params![&file_path],
+                )
+                .await?
+                .is_some();
 
             if !exists {
                 let (title, _year) = scanner::parse_video_filename(
@@ -210,34 +206,41 @@ pub async fn run_scan(
                     .and_then(|y| chrono::NaiveDate::from_ymd_opt(y, 1, 1));
                 let meta_status = if movie_nfo.lockdata { "ready" } else { "pending_meta" };
 
-                sqlx::query!(
-                    r#"INSERT INTO media.movies
-                       (library_id, file_path, file_size, duration_secs, video_codec,
-                        audio_codec, resolution_w, resolution_h, title,
-                        original_title, overview, release_date, genres,
-                        content_rating, tmdb_id, imdb_id, meta_locked, meta_status)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-                       ON CONFLICT (file_path) DO NOTHING"#,
-                    library_id,
-                    file_path,
-                    file_size,
-                    info.duration_secs,
-                    info.video_codec,
-                    info.audio_codec,
-                    info.width,
-                    info.height,
-                    title,
-                    movie_nfo.original_title,
-                    movie_nfo.plot,
-                    release_date,
-                    &movie_nfo.genres,
-                    movie_nfo.mpaa,
-                    movie_nfo.tmdb_id,
-                    movie_nfo.imdb_id,
-                    movie_nfo.lockdata,
-                    meta_status,
+                let id = kubuno_db::new_id();
+                let sql = format!(
+                    "INSERT {}INTO media.movies \
+                       (id, library_id, file_path, file_size, duration_secs, video_codec, \
+                        audio_codec, resolution_w, resolution_h, title, \
+                        original_title, overview, release_date, genres, \
+                        content_rating, tmdb_id, imdb_id, meta_locked, meta_status) \
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19){}",
+                    db.backend().insert_ignore_prefix(),
+                    db.backend().on_conflict_do_nothing(&["file_path"]),
+                );
+                db.execute(
+                    &sql,
+                    params![
+                        id,
+                        library_id,
+                        file_path,
+                        file_size,
+                        info.duration_secs,
+                        info.video_codec,
+                        info.audio_codec,
+                        info.width,
+                        info.height,
+                        title,
+                        movie_nfo.original_title,
+                        movie_nfo.plot,
+                        release_date,
+                        &movie_nfo.genres,
+                        movie_nfo.mpaa,
+                        movie_nfo.tmdb_id,
+                        movie_nfo.imdb_id,
+                        movie_nfo.lockdata,
+                        meta_status,
+                    ],
                 )
-                .execute(db)
                 .await?;
 
                 added += 1;
@@ -253,13 +256,13 @@ pub async fn run_scan(
                 .unwrap_or(name_from_file);
 
             // Check if episode already indexed
-            let ep_exists: bool = sqlx::query_scalar!(
-                "SELECT EXISTS(SELECT 1 FROM media.tv_episodes WHERE file_path = $1)",
-                file_path
-            )
-            .fetch_one(db)
-            .await?
-            .unwrap_or(false);
+            let ep_exists = db
+                .fetch_optional_scalar::<Uuid>(
+                    "SELECT id FROM media.tv_episodes WHERE file_path = $1",
+                    params![&file_path],
+                )
+                .await?
+                .is_some();
 
             if !ep_exists {
                 // Local NFO (tvshow.nfo) seeds name/plot/genres/tmdb_id and can
@@ -268,114 +271,115 @@ pub async fn run_scan(
                 let show_name = show_nfo.title.clone().unwrap_or(show_name);
                 let show_meta_status = if show_nfo.lockdata { "ready" } else { "pending_meta" };
 
-                // Upsert show
-                let show_id: Uuid = sqlx::query_scalar!(
-                    r#"INSERT INTO media.tv_shows
-                       (library_id, name, meta_status, overview, genres, tmdb_id, meta_locked)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7)
-                       ON CONFLICT DO NOTHING
-                       RETURNING id"#,
-                    library_id,
-                    show_name,
-                    show_meta_status,
-                    show_nfo.plot,
-                    &show_nfo.genres,
-                    show_nfo.tmdb_id,
-                    show_nfo.lockdata,
-                )
-                .fetch_optional(db)
-                .await?
-                .unwrap_or_else(|| {
-                    // Inserted nothing → row already exists, fetch id
-                    Uuid::nil() // placeholder, replaced below
-                });
-
-                let show_id = if show_id == Uuid::nil() {
-                    sqlx::query_scalar!(
+                // Find or create the show (no functional ON CONFLICT target here,
+                // so this is a SELECT-first rather than an upsert).
+                let existing_show_id = db
+                    .fetch_optional_scalar::<Uuid>(
                         "SELECT id FROM media.tv_shows WHERE library_id = $1 AND name = $2",
-                        library_id,
-                        show_name,
+                        params![library_id, &show_name],
                     )
-                    .fetch_one(db)
-                    .await?
+                    .await?;
+
+                let show_id = if let Some(id) = existing_show_id {
+                    id
                 } else {
-                    show_id
+                    let id = kubuno_db::new_id();
+                    db.execute(
+                        r#"INSERT INTO media.tv_shows
+                           (id, library_id, name, meta_status, overview, genres, tmdb_id, meta_locked)
+                           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#,
+                        params![
+                            id,
+                            library_id,
+                            &show_name,
+                            show_meta_status,
+                            show_nfo.plot,
+                            &show_nfo.genres,
+                            show_nfo.tmdb_id,
+                            show_nfo.lockdata,
+                        ],
+                    )
+                    .await?;
+                    id
                 };
 
-                // Upsert season
-                let season_id: Uuid = sqlx::query_scalar!(
-                    r#"INSERT INTO media.tv_seasons (show_id, season_number)
-                       VALUES ($1, $2)
-                       ON CONFLICT (show_id, season_number) DO NOTHING
-                       RETURNING id"#,
-                    show_id,
-                    season_num,
-                )
-                .fetch_optional(db)
-                .await?
-                .unwrap_or_else(Uuid::nil);
-
-                let season_id = if season_id == Uuid::nil() {
-                    sqlx::query_scalar!(
-                        "SELECT id FROM media.tv_seasons WHERE show_id = $1 AND season_number = $2",
-                        show_id,
-                        season_num,
-                    )
-                    .fetch_one(db)
-                    .await?
+                // Find or create the season: the explicit (show_id, season_number)
+                // conflict target lets us mint the id and fall back to a re-select
+                // only when the insert was actually skipped.
+                let season_id_new = kubuno_db::new_id();
+                let season_sql = format!(
+                    "INSERT {}INTO media.tv_seasons (id, show_id, season_number) VALUES ($1,$2,$3){}",
+                    db.backend().insert_ignore_prefix(),
+                    db.backend().on_conflict_do_nothing(&["show_id", "season_number"]),
+                );
+                let season_affected = db
+                    .execute(&season_sql, params![season_id_new, show_id, season_num])
+                    .await?;
+                let season_id = if season_affected > 0 {
+                    season_id_new
                 } else {
-                    season_id
+                    db.fetch_scalar::<Uuid>(
+                        "SELECT id FROM media.tv_seasons WHERE show_id = $1 AND season_number = $2",
+                        params![show_id, season_num],
+                    )
+                    .await?
                 };
 
                 let info = ffprobe::probe(&settings.transcoding.ffprobe_bin, &file_path)
                     .await
                     .unwrap_or_default();
 
-                sqlx::query!(
-                    r#"INSERT INTO media.tv_episodes
-                       (season_id, show_id, file_path, file_size, episode_number,
-                        duration_secs, video_codec, audio_codec, resolution_w, resolution_h)
-                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-                       ON CONFLICT (file_path) DO NOTHING"#,
-                    season_id,
-                    show_id,
-                    file_path,
-                    file_size,
-                    episode_num,
-                    info.duration_secs,
-                    info.video_codec,
-                    info.audio_codec,
-                    info.width,
-                    info.height,
+                let episode_id = kubuno_db::new_id();
+                let episode_sql = format!(
+                    "INSERT {}INTO media.tv_episodes \
+                       (id, season_id, show_id, file_path, file_size, episode_number, \
+                        duration_secs, video_codec, audio_codec, resolution_w, resolution_h) \
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11){}",
+                    db.backend().insert_ignore_prefix(),
+                    db.backend().on_conflict_do_nothing(&["file_path"]),
+                );
+                db.execute(
+                    &episode_sql,
+                    params![
+                        episode_id,
+                        season_id,
+                        show_id,
+                        file_path,
+                        file_size,
+                        episode_num,
+                        info.duration_secs,
+                        info.video_codec,
+                        info.audio_codec,
+                        info.width,
+                        info.height,
+                    ],
                 )
-                .execute(db)
                 .await?;
 
-                // Keep season episode count in sync
-                sqlx::query!(
+                // Keep season episode count in sync. `season_id` is bound twice
+                // (once per placeholder) since portable placeholders cannot repeat.
+                db.execute(
                     r#"UPDATE media.tv_seasons
                        SET episode_count = (
                            SELECT COUNT(*) FROM media.tv_episodes
                            WHERE season_id = $1
-                       ) WHERE id = $1"#,
-                    season_id,
+                       ) WHERE id = $2"#,
+                    params![season_id, season_id],
                 )
-                .execute(db)
                 .await?;
 
-                // Keep show counts in sync
-                sqlx::query!(
+                // Keep show counts in sync (`show_id` bound three times, same reason).
+                db.execute(
                     r#"UPDATE media.tv_shows
                        SET episode_count = (
                                SELECT COUNT(*) FROM media.tv_episodes WHERE show_id = $1
                            ),
                            season_count = (
-                               SELECT COUNT(*) FROM media.tv_seasons WHERE show_id = $1
+                               SELECT COUNT(*) FROM media.tv_seasons WHERE show_id = $2
                            )
-                       WHERE id = $1"#,
-                    show_id,
+                       WHERE id = $3"#,
+                    params![show_id, show_id, show_id],
                 )
-                .execute(db)
                 .await?;
 
                 added += 1;
@@ -410,11 +414,10 @@ pub async fn run_scan(
 
             // Backfill the album release year from the embedded date tag.
             if let (Some(aid), Some(year)) = (album_id, tags.year) {
-                sqlx::query!(
-                    "UPDATE media.albums SET release_year = COALESCE(release_year, $2) WHERE id = $1",
-                    aid, year
+                db.execute(
+                    "UPDATE media.albums SET release_year = COALESCE(release_year, $1) WHERE id = $2",
+                    params![year, aid],
                 )
-                .execute(db)
                 .await?;
             }
 
@@ -422,12 +425,12 @@ pub async fn run_scan(
             // resolve once per album per scan.
             if let Some(aid) = album_id {
                 if cover_done.insert(aid) {
-                    let already_local: Option<bool> = sqlx::query_scalar!(
-                        "SELECT cover_path LIKE '/api/%' FROM media.albums WHERE id = $1",
-                        aid
-                    )
-                    .fetch_one(db)
-                    .await?;
+                    let already_local = db
+                        .fetch_scalar::<Option<bool>>(
+                            "SELECT cover_path LIKE '/api/%' FROM media.albums WHERE id = $1",
+                            params![aid],
+                        )
+                        .await?;
                     if !already_local.unwrap_or(false) {
                         if let Some(api_path) = covers::resolve_local_cover(
                             &settings.transcoding.ffmpeg_bin,
@@ -437,48 +440,68 @@ pub async fn run_scan(
                         )
                         .await
                         {
-                            sqlx::query!(
-                                "UPDATE media.albums SET cover_path = $2 WHERE id = $1",
-                                aid, api_path
+                            db.execute(
+                                "UPDATE media.albums SET cover_path = $1 WHERE id = $2",
+                                params![api_path, aid],
                             )
-                            .execute(db)
                             .await?;
                         }
                     }
                 }
             }
 
-            let exists: bool = sqlx::query_scalar!(
-                "SELECT EXISTS(SELECT 1 FROM media.tracks WHERE file_path = $1)",
-                file_path
-            )
-            .fetch_one(db)
-            .await?
-            .unwrap_or(false);
+            let exists = db
+                .fetch_optional_scalar::<Uuid>(
+                    "SELECT id FROM media.tracks WHERE file_path = $1",
+                    params![&file_path],
+                )
+                .await?
+                .is_some();
 
             // Upsert: new tracks get inserted, existing tracks get their
             // linkage and tag-derived fields refreshed (tags are authoritative).
-            sqlx::query!(
-                r#"INSERT INTO media.tracks
-                   (library_id, file_path, file_size, title, duration_secs,
-                    codec, bitrate, sample_rate, channels, artist_id, album_id,
-                    track_number, disc_number, composer, lyricist)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-                   ON CONFLICT (file_path) DO UPDATE
-                   SET artist_id    = EXCLUDED.artist_id,
-                       album_id     = EXCLUDED.album_id,
-                       title        = EXCLUDED.title,
-                       track_number = COALESCE(EXCLUDED.track_number, media.tracks.track_number),
-                       disc_number  = EXCLUDED.disc_number,
-                       composer     = COALESCE(EXCLUDED.composer, media.tracks.composer),
-                       lyricist     = COALESCE(EXCLUDED.lyricist, media.tracks.lyricist)"#,
-                library_id, file_path, file_size, title,
-                info.duration_secs, info.audio_codec, info.bitrate,
-                info.sample_rate, info.channels, artist_id, album_id,
-                tags.track_number, tags.disc_number.unwrap_or(1),
-                tags.composer, tags.lyricist,
+            let track_id = kubuno_db::new_id();
+            let upsert_clause = db.backend().upsert(
+                "media.tracks",
+                &["file_path"],
+                &[
+                    Assign::Incoming("artist_id"),
+                    Assign::Incoming("album_id"),
+                    Assign::Incoming("title"),
+                    Assign::Expr { col: "track_number", expr: "COALESCE({new}, {cur})" },
+                    Assign::Incoming("disc_number"),
+                    Assign::Expr { col: "composer", expr: "COALESCE({new}, {cur})" },
+                    Assign::Expr { col: "lyricist", expr: "COALESCE({new}, {cur})" },
+                ],
+            );
+            let track_sql = format!(
+                "INSERT INTO media.tracks \
+                   (id, library_id, file_path, file_size, title, duration_secs, \
+                    codec, bitrate, sample_rate, channels, artist_id, album_id, \
+                    track_number, disc_number, composer, lyricist) \
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16){upsert_clause}"
+            );
+            db.execute(
+                &track_sql,
+                params![
+                    track_id,
+                    library_id,
+                    file_path,
+                    file_size,
+                    title,
+                    info.duration_secs,
+                    info.audio_codec,
+                    info.bitrate,
+                    info.sample_rate,
+                    info.channels,
+                    artist_id,
+                    album_id,
+                    tags.track_number,
+                    tags.disc_number.unwrap_or(1),
+                    tags.composer.clone(),
+                    tags.lyricist.clone(),
+                ],
             )
-            .execute(db)
             .await?;
 
             if !exists {
@@ -489,37 +512,31 @@ pub async fn run_scan(
         processed += 1;
 
         if processed % 50 == 0 {
-            sqlx::query!(
-                "UPDATE media.scan_jobs SET files_processed = $2 WHERE id = $1",
-                job_id, processed
+            db.execute(
+                "UPDATE media.scan_jobs SET files_processed = $1 WHERE id = $2",
+                params![processed, job_id],
             )
-            .execute(db)
             .await?;
         }
     }
 
     // Update library item count
-    sqlx::query!(
+    db.execute(
         r#"UPDATE media.libraries
-           SET item_count   = item_count + $2,
-               last_scan_at = NOW(),
+           SET item_count   = item_count + $1,
+               last_scan_at = $2,
                scan_status  = 'idle'
-           WHERE id = $1"#,
-        library_id,
-        added,
+           WHERE id = $3"#,
+        params![added, chrono::Utc::now(), library_id],
     )
-    .execute(db)
     .await?;
 
-    sqlx::query!(
+    db.execute(
         r#"UPDATE media.scan_jobs
-           SET status = 'done', files_processed = $2, files_added = $3, finished_at = NOW()
-           WHERE id = $1"#,
-        job_id,
-        processed,
-        added,
+           SET status = 'done', files_processed = $1, files_added = $2, finished_at = $3
+           WHERE id = $4"#,
+        params![processed, added, chrono::Utc::now(), job_id],
     )
-    .execute(db)
     .await?;
 
     tracing::info!(library_id = %library_id, processed, added, "Scan terminé");
@@ -566,7 +583,7 @@ pub async fn run_scan(
 
 /// Index a single file detected by the filesystem watcher.
 pub async fn index_single_file(
-    db:         &PgPool,
+    db:         &kubuno_db::DbPool,
     settings:   &Arc<Settings>,
     library_id: Uuid,
     file_path:  &str,
@@ -583,13 +600,13 @@ pub async fn index_single_file(
             .filter(|s| !s.is_empty())
             .unwrap_or(name_from_file);
 
-        let ep_exists: bool = sqlx::query_scalar!(
-            "SELECT EXISTS(SELECT 1 FROM media.tv_episodes WHERE file_path = $1)",
-            file_path
-        )
-        .fetch_one(db)
-        .await?
-        .unwrap_or(false);
+        let ep_exists = db
+            .fetch_optional_scalar::<Uuid>(
+                "SELECT id FROM media.tv_episodes WHERE file_path = $1",
+                params![file_path],
+            )
+            .await?
+            .is_some();
 
         if ep_exists {
             return Ok(());
@@ -600,82 +617,83 @@ pub async fn index_single_file(
         let show_name = show_nfo.title.clone().unwrap_or(show_name);
         let show_meta_status = if show_nfo.lockdata { "ready" } else { "pending_meta" };
 
-        let show_id: Uuid = sqlx::query_scalar!(
-            r#"INSERT INTO media.tv_shows
-               (library_id, name, meta_status, overview, genres, tmdb_id, meta_locked)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)
-               ON CONFLICT DO NOTHING
-               RETURNING id"#,
-            library_id,
-            show_name,
-            show_meta_status,
-            show_nfo.plot,
-            &show_nfo.genres,
-            show_nfo.tmdb_id,
-            show_nfo.lockdata,
-        )
-        .fetch_optional(db)
-        .await?
-        .unwrap_or(Uuid::nil());
-
-        let show_id = if show_id == Uuid::nil() {
-            sqlx::query_scalar!(
+        // Find or create the show (no functional ON CONFLICT target: SELECT-first).
+        let existing_show_id = db
+            .fetch_optional_scalar::<Uuid>(
                 "SELECT id FROM media.tv_shows WHERE library_id = $1 AND name = $2",
-                library_id,
-                show_name,
+                params![library_id, &show_name],
             )
-            .fetch_one(db)
-            .await?
+            .await?;
+
+        let show_id = if let Some(id) = existing_show_id {
+            id
         } else {
-            show_id
+            let id = kubuno_db::new_id();
+            db.execute(
+                r#"INSERT INTO media.tv_shows
+                   (id, library_id, name, meta_status, overview, genres, tmdb_id, meta_locked)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#,
+                params![
+                    id,
+                    library_id,
+                    &show_name,
+                    show_meta_status,
+                    show_nfo.plot,
+                    &show_nfo.genres,
+                    show_nfo.tmdb_id,
+                    show_nfo.lockdata,
+                ],
+            )
+            .await?;
+            id
         };
 
-        let season_id: Uuid = sqlx::query_scalar!(
-            r#"INSERT INTO media.tv_seasons (show_id, season_number)
-               VALUES ($1, $2)
-               ON CONFLICT (show_id, season_number) DO NOTHING
-               RETURNING id"#,
-            show_id,
-            season_num,
-        )
-        .fetch_optional(db)
-        .await?
-        .unwrap_or(Uuid::nil());
-
-        let season_id = if season_id == Uuid::nil() {
-            sqlx::query_scalar!(
-                "SELECT id FROM media.tv_seasons WHERE show_id = $1 AND season_number = $2",
-                show_id,
-                season_num,
-            )
-            .fetch_one(db)
-            .await?
+        let season_id_new = kubuno_db::new_id();
+        let season_sql = format!(
+            "INSERT {}INTO media.tv_seasons (id, show_id, season_number) VALUES ($1,$2,$3){}",
+            db.backend().insert_ignore_prefix(),
+            db.backend().on_conflict_do_nothing(&["show_id", "season_number"]),
+        );
+        let season_affected = db
+            .execute(&season_sql, params![season_id_new, show_id, season_num])
+            .await?;
+        let season_id = if season_affected > 0 {
+            season_id_new
         } else {
-            season_id
+            db.fetch_scalar::<Uuid>(
+                "SELECT id FROM media.tv_seasons WHERE show_id = $1 AND season_number = $2",
+                params![show_id, season_num],
+            )
+            .await?
         };
 
         let info = ffprobe::probe(&settings.transcoding.ffprobe_bin, file_path)
             .await
             .unwrap_or_default();
 
-        sqlx::query!(
-            r#"INSERT INTO media.tv_episodes
-               (season_id, show_id, file_path, file_size, episode_number,
-                duration_secs, video_codec, audio_codec, resolution_w, resolution_h)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-               ON CONFLICT (file_path) DO NOTHING"#,
-            season_id, show_id, file_path, file_size, episode_num,
-            info.duration_secs, info.video_codec, info.audio_codec,
-            info.width, info.height,
+        let episode_id = kubuno_db::new_id();
+        let episode_sql = format!(
+            "INSERT {}INTO media.tv_episodes \
+               (id, season_id, show_id, file_path, file_size, episode_number, \
+                duration_secs, video_codec, audio_codec, resolution_w, resolution_h) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11){}",
+            db.backend().insert_ignore_prefix(),
+            db.backend().on_conflict_do_nothing(&["file_path"]),
+        );
+        db.execute(
+            &episode_sql,
+            params![
+                episode_id, season_id, show_id, file_path, file_size, episode_num,
+                info.duration_secs, info.video_codec, info.audio_codec,
+                info.width, info.height,
+            ],
         )
-        .execute(db)
         .await?;
 
-        sqlx::query!(
+        db.execute(
             "UPDATE media.libraries SET item_count = item_count + 1 WHERE id = $1",
-            library_id
+            params![library_id],
         )
-        .execute(db)
         .await?;
 
         let db2 = db.clone();
@@ -687,13 +705,13 @@ pub async fn index_single_file(
         });
     } else if lib_type != "music" {
         // Video (movies + home_videos)
-        let exists: bool = sqlx::query_scalar!(
-            "SELECT EXISTS(SELECT 1 FROM media.movies WHERE file_path = $1)",
-            file_path
-        )
-        .fetch_one(db)
-        .await?
-        .unwrap_or(false);
+        let exists = db
+            .fetch_optional_scalar::<Uuid>(
+                "SELECT id FROM media.movies WHERE file_path = $1",
+                params![file_path],
+            )
+            .await?
+            .is_some();
 
         if exists {
             return Ok(());
@@ -717,35 +735,40 @@ pub async fn index_single_file(
             .and_then(|y| chrono::NaiveDate::from_ymd_opt(y, 1, 1));
         let meta_status = if movie_nfo.lockdata { "ready" } else { "pending_meta" };
 
-        sqlx::query!(
-            r#"INSERT INTO media.movies
-               (library_id, file_path, file_size, duration_secs, video_codec,
-                audio_codec, resolution_w, resolution_h, title,
-                original_title, overview, release_date, genres,
-                content_rating, tmdb_id, imdb_id, meta_locked, meta_status)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-               ON CONFLICT (file_path) DO NOTHING"#,
-            library_id, file_path, file_size,
-            info.duration_secs, info.video_codec, info.audio_codec,
-            info.width, info.height, title,
-            movie_nfo.original_title,
-            movie_nfo.plot,
-            release_date,
-            &movie_nfo.genres,
-            movie_nfo.mpaa,
-            movie_nfo.tmdb_id,
-            movie_nfo.imdb_id,
-            movie_nfo.lockdata,
-            meta_status,
+        let id = kubuno_db::new_id();
+        let sql = format!(
+            "INSERT {}INTO media.movies \
+               (id, library_id, file_path, file_size, duration_secs, video_codec, \
+                audio_codec, resolution_w, resolution_h, title, \
+                original_title, overview, release_date, genres, \
+                content_rating, tmdb_id, imdb_id, meta_locked, meta_status) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19){}",
+            db.backend().insert_ignore_prefix(),
+            db.backend().on_conflict_do_nothing(&["file_path"]),
+        );
+        db.execute(
+            &sql,
+            params![
+                id, library_id, file_path, file_size,
+                info.duration_secs, info.video_codec, info.audio_codec,
+                info.width, info.height, title,
+                movie_nfo.original_title,
+                movie_nfo.plot,
+                release_date,
+                &movie_nfo.genres,
+                movie_nfo.mpaa,
+                movie_nfo.tmdb_id,
+                movie_nfo.imdb_id,
+                movie_nfo.lockdata,
+                meta_status,
+            ],
         )
-        .execute(db)
         .await?;
 
-        sqlx::query!(
+        db.execute(
             "UPDATE media.libraries SET item_count = item_count + 1 WHERE id = $1",
-            library_id
+            params![library_id],
         )
-        .execute(db)
         .await?;
 
         let db2 = db.clone();
@@ -782,22 +805,21 @@ pub async fn index_single_file(
         };
 
         if let (Some(aid), Some(year)) = (album_id, tags.year) {
-            sqlx::query!(
-                "UPDATE media.albums SET release_year = COALESCE(release_year, $2) WHERE id = $1",
-                aid, year
+            db.execute(
+                "UPDATE media.albums SET release_year = COALESCE(release_year, $1) WHERE id = $2",
+                params![year, aid],
             )
-            .execute(db)
             .await?;
         }
 
         // Local artwork beats remote covers.
         if let Some(aid) = album_id {
-            let already_local: Option<bool> = sqlx::query_scalar!(
-                "SELECT cover_path LIKE '/api/%' FROM media.albums WHERE id = $1",
-                aid
-            )
-            .fetch_one(db)
-            .await?;
+            let already_local = db
+                .fetch_scalar::<Option<bool>>(
+                    "SELECT cover_path LIKE '/api/%' FROM media.albums WHERE id = $1",
+                    params![aid],
+                )
+                .await?;
             if !already_local.unwrap_or(false) {
                 if let Some(api_path) = covers::resolve_local_cover(
                     &settings.transcoding.ffmpeg_bin,
@@ -807,53 +829,61 @@ pub async fn index_single_file(
                 )
                 .await
                 {
-                    sqlx::query!(
-                        "UPDATE media.albums SET cover_path = $2 WHERE id = $1",
-                        aid, api_path
+                    db.execute(
+                        "UPDATE media.albums SET cover_path = $1 WHERE id = $2",
+                        params![api_path, aid],
                     )
-                    .execute(db)
                     .await?;
                 }
             }
         }
 
-        let exists: bool = sqlx::query_scalar!(
-            "SELECT EXISTS(SELECT 1 FROM media.tracks WHERE file_path = $1)",
-            file_path
-        )
-        .fetch_one(db)
-        .await?
-        .unwrap_or(false);
+        let exists = db
+            .fetch_optional_scalar::<Uuid>(
+                "SELECT id FROM media.tracks WHERE file_path = $1",
+                params![file_path],
+            )
+            .await?
+            .is_some();
 
-        sqlx::query!(
-            r#"INSERT INTO media.tracks
-               (library_id, file_path, file_size, title, duration_secs,
-                codec, bitrate, sample_rate, channels, artist_id, album_id,
-                track_number, disc_number, composer, lyricist)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-               ON CONFLICT (file_path) DO UPDATE
-               SET artist_id    = EXCLUDED.artist_id,
-                   album_id     = EXCLUDED.album_id,
-                   title        = EXCLUDED.title,
-                   track_number = COALESCE(EXCLUDED.track_number, media.tracks.track_number),
-                   disc_number  = EXCLUDED.disc_number,
-                   composer     = COALESCE(EXCLUDED.composer, media.tracks.composer),
-                   lyricist     = COALESCE(EXCLUDED.lyricist, media.tracks.lyricist)"#,
-            library_id, file_path, file_size, title,
-            info.duration_secs, info.audio_codec, info.bitrate,
-            info.sample_rate, info.channels, artist_id, album_id,
-            tags.track_number, tags.disc_number.unwrap_or(1),
-            tags.composer, tags.lyricist,
+        let track_id = kubuno_db::new_id();
+        let upsert_clause = db.backend().upsert(
+            "media.tracks",
+            &["file_path"],
+            &[
+                Assign::Incoming("artist_id"),
+                Assign::Incoming("album_id"),
+                Assign::Incoming("title"),
+                Assign::Expr { col: "track_number", expr: "COALESCE({new}, {cur})" },
+                Assign::Incoming("disc_number"),
+                Assign::Expr { col: "composer", expr: "COALESCE({new}, {cur})" },
+                Assign::Expr { col: "lyricist", expr: "COALESCE({new}, {cur})" },
+            ],
+        );
+        let track_sql = format!(
+            "INSERT INTO media.tracks \
+               (id, library_id, file_path, file_size, title, duration_secs, \
+                codec, bitrate, sample_rate, channels, artist_id, album_id, \
+                track_number, disc_number, composer, lyricist) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16){upsert_clause}"
+        );
+        db.execute(
+            &track_sql,
+            params![
+                track_id, library_id, file_path, file_size, title,
+                info.duration_secs, info.audio_codec, info.bitrate,
+                info.sample_rate, info.channels, artist_id, album_id,
+                tags.track_number, tags.disc_number.unwrap_or(1),
+                tags.composer.clone(), tags.lyricist.clone(),
+            ],
         )
-        .execute(db)
         .await?;
 
         if !exists {
-            sqlx::query!(
+            db.execute(
                 "UPDATE media.libraries SET item_count = item_count + 1 WHERE id = $1",
-                library_id
+                params![library_id],
             )
-            .execute(db)
             .await?;
         }
 

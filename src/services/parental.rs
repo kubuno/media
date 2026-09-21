@@ -90,21 +90,20 @@ pub fn is_allowed(rating: Option<&str>, max_age: u8, block_unrated: bool) -> boo
 /// Ids that are not movies — TV episodes, for instance — are simply absent from
 /// the map, which the caller reads as "unrated".
 pub async fn ratings_for(
-    db: &sqlx::PgPool,
+    db: &kubuno_db::DbPool,
     ids: &[Uuid],
 ) -> HashMap<Uuid, Option<String>> {
     if ids.is_empty() {
         return HashMap::new();
     }
-    let rows = sqlx::query_as::<_, (Uuid, Option<String>)>(
-        "SELECT id, content_rating FROM media.movies WHERE id = ANY($1)",
-    )
-    .bind(ids)
-    .fetch_all(db)
-    .await;
+    // Portable `id IN (...)` — no PostgreSQL `= ANY(array)`.
+    let list = db.backend().in_list(1, ids.len());
+    let sql = format!("SELECT id, content_rating FROM media.movies WHERE id IN ({list})");
+    let binds: Vec<kubuno_db::DbValue> = ids.iter().map(|id| (*id).into()).collect();
+    let rows = db.fetch_all_as::<RatingRow>(&sql, binds).await;
 
     match rows {
-        Ok(rows) => rows.into_iter().collect(),
+        Ok(rows) => rows.into_iter().map(|r| (r.id, r.content_rating)).collect(),
         Err(e) => {
             tracing::error!(error = %e, "Contrôle parental : lecture des classifications");
             // A failed read must not open the gate: an empty map makes every id
@@ -115,18 +114,25 @@ pub async fn ratings_for(
 }
 
 /// Certification of a single item, `None` when the id is not a movie.
-pub async fn rating_of(db: &sqlx::PgPool, id: Uuid) -> Result<Option<String>, sqlx::Error> {
-    let row = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT content_rating FROM media.movies WHERE id = $1",
-    )
-    .bind(id)
-    .fetch_optional(db)
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "Contrôle parental : lecture de la classification");
-        e
-    })?;
+pub async fn rating_of(db: &kubuno_db::DbPool, id: Uuid) -> Result<Option<String>, sqlx::Error> {
+    let row = db
+        .fetch_optional_scalar::<Option<String>>(
+            "SELECT content_rating FROM media.movies WHERE id = $1",
+            kubuno_db::params![id],
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Contrôle parental : lecture de la classification");
+            e
+        })?;
     Ok(row.flatten())
+}
+
+/// One movie's certification, read for the `id IN (...)` batch above.
+#[derive(sqlx::FromRow)]
+struct RatingRow {
+    id:             Uuid,
+    content_rating: Option<String>,
 }
 
 #[cfg(test)]

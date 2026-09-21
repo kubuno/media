@@ -27,8 +27,10 @@ pub struct Movie {
     pub vote_average:        Option<f64>,
     pub vote_count:          Option<i32>,
     pub popularity:          Option<f64>,
+    #[sqlx(json)]
     pub genres:              Vec<String>,
     pub original_language:   Option<String>,
+    #[sqlx(json)]
     pub production_countries: Vec<String>,
     pub meta_status:         String,
     pub cast_json:           JsonValue,
@@ -56,7 +58,9 @@ pub struct TvShow {
     pub backdrop_path:     Option<String>,
     pub vote_average:      Option<f64>,
     pub vote_count:        Option<i32>,
+    #[sqlx(json)]
     pub genres:            Vec<String>,
+    #[sqlx(json)]
     pub networks:          Vec<String>,
     pub season_count:      i32,
     pub episode_count:     i32,

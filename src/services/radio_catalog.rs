@@ -5,7 +5,7 @@
 //! or AAC). They can drift over time; users can always add their own custom
 //! stations or use the discovery search (Radio Browser) to find current URLs.
 
-use sqlx::PgPool;
+use kubuno_db::{dialect::Assign, params};
 
 pub struct RadioSeed {
     pub slug:       &'static str,
@@ -177,31 +177,40 @@ pub fn catalog() -> Vec<RadioSeed> {
 }
 
 /// Idempotently insert/refresh the builtin radio catalogue (keyed by `slug`).
-pub async fn seed(db: &PgPool) {
+pub async fn seed(db: &kubuno_db::DbPool) {
     let items = catalog();
     let count = items.len();
+    // Runtime query (never a macro: the module runs on three engines). `tags`
+    // is a JSON column now; `favicon` stays a literal NULL — it is neither set
+    // on insert nor touched by the upsert (unchanged behaviour from before).
+    let clause = db.backend().upsert(
+        "media.radio_stations",
+        &["slug"],
+        &[
+            Assign::Incoming("name"),
+            Assign::Incoming("stream_url"),
+            Assign::Incoming("homepage"),
+            Assign::Incoming("tags"),
+            Assign::Incoming("country"),
+            Assign::Incoming("language"),
+            Assign::Incoming("codec"),
+            Assign::Incoming("bitrate"),
+        ],
+    );
+    let sql = format!(
+        r#"INSERT INTO media.radio_stations
+             (id, name, stream_url, homepage, favicon, tags, country, language, codec, bitrate, is_builtin, slug)
+           VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, $8, $9, TRUE, $10){clause}"#
+    );
     for s in items {
         let tags: Vec<String> = s.tags.iter().map(|t| t.to_string()).collect();
-        let res = sqlx::query(
-            r#"INSERT INTO media.radio_stations
-                 (name, stream_url, homepage, favicon, tags, country, language, codec, bitrate, is_builtin, slug)
-               VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, TRUE, $9)
-               ON CONFLICT (slug) DO UPDATE SET
-                 name = EXCLUDED.name, stream_url = EXCLUDED.stream_url, homepage = EXCLUDED.homepage,
-                 tags = EXCLUDED.tags, country = EXCLUDED.country, language = EXCLUDED.language,
-                 codec = EXCLUDED.codec, bitrate = EXCLUDED.bitrate, updated_at = NOW()"#,
-        )
-        .bind(s.name)
-        .bind(s.stream_url)
-        .bind(s.homepage)
-        .bind(&tags)
-        .bind(s.country)
-        .bind(s.language)
-        .bind(s.codec)
-        .bind(s.bitrate)
-        .bind(s.slug)
-        .execute(db)
-        .await;
+        let id = kubuno_db::new_id();
+        let res = db
+            .execute(
+                &sql,
+                params![id, s.name, s.stream_url, s.homepage, tags, s.country, s.language, s.codec, s.bitrate, s.slug],
+            )
+            .await;
         if let Err(e) = res {
             tracing::warn!(error = %e, slug = %s.slug, "seed radio station");
         }

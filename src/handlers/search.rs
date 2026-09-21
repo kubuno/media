@@ -2,6 +2,8 @@ use axum::{
     extract::{Extension, Query, State},
     Json,
 };
+use chrono::NaiveDate;
+use kubuno_db::params;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -13,6 +15,45 @@ use crate::{errors::MediaError, middleware::auth::AuthUser, services::parental, 
 pub struct SearchQuery {
     pub q:     String,
     pub limit: Option<i64>,
+}
+
+// Row shapes for the runtime queries (one binary, three engines: kubuno-db).
+#[derive(sqlx::FromRow)]
+struct MovieHit {
+    id:           Uuid,
+    title:        String,
+    release_date: Option<NaiveDate>,
+    poster_path:  Option<String>,
+}
+#[derive(sqlx::FromRow)]
+struct ShowHit {
+    id:             Uuid,
+    name:           String,
+    first_air_date: Option<NaiveDate>,
+    poster_path:    Option<String>,
+}
+#[derive(sqlx::FromRow)]
+struct ArtistHit {
+    id:         Uuid,
+    name:       String,
+    image_path: Option<String>,
+}
+#[derive(sqlx::FromRow)]
+struct AlbumHit {
+    id:           Uuid,
+    title:        String,
+    release_year: Option<i32>,
+    cover_path:   Option<String>,
+    artist_name:  Option<String>,
+}
+#[derive(sqlx::FromRow)]
+struct TrackHit {
+    id:            Uuid,
+    title:         String,
+    duration_secs: i32,
+    album_title:   Option<String>,
+    cover_path:    Option<String>,
+    artist_name:   Option<String>,
 }
 
 pub async fn search(
@@ -27,48 +68,40 @@ pub async fn search(
     let limit = q.limit.unwrap_or(10).min(50);
     let pattern = format!("%{}%", q.q.to_lowercase());
 
-    let movies = sqlx::query!(
+    let movies = state.db.fetch_all_as::<MovieHit>(
         r#"SELECT id, title, release_date, poster_path
            FROM media.movies
            WHERE LOWER(title) LIKE $1
            LIMIT $2"#,
-        pattern, limit
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![&pattern, limit],
+    ).await?;
 
-    let shows = sqlx::query!(
+    let shows = state.db.fetch_all_as::<ShowHit>(
         r#"SELECT id, name, first_air_date, poster_path
            FROM media.tv_shows
            WHERE LOWER(name) LIKE $1
            LIMIT $2"#,
-        pattern, limit
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![&pattern, limit],
+    ).await?;
 
-    let artists = sqlx::query!(
+    let artists = state.db.fetch_all_as::<ArtistHit>(
         r#"SELECT id, name, image_path
            FROM media.artists
            WHERE LOWER(name) LIKE $1
            LIMIT $2"#,
-        pattern, limit
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![&pattern, limit],
+    ).await?;
 
-    let albums = sqlx::query!(
+    let albums = state.db.fetch_all_as::<AlbumHit>(
         r#"SELECT a.id, a.title, a.release_year, a.cover_path, ar.name AS artist_name
            FROM media.albums a
            LEFT JOIN media.artists ar ON ar.id = a.artist_id
            WHERE LOWER(a.title) LIKE $1
            LIMIT $2"#,
-        pattern, limit
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![&pattern, limit],
+    ).await?;
 
-    let tracks = sqlx::query!(
+    let tracks = state.db.fetch_all_as::<TrackHit>(
         r#"SELECT t.id, t.title, t.duration_secs,
                   al.title AS album_title, al.cover_path,
                   ar.name AS artist_name
@@ -77,16 +110,13 @@ pub async fn search(
            LEFT JOIN media.artists ar ON ar.id = t.artist_id
            WHERE LOWER(t.title) LIKE $1
            LIMIT $2"#,
-        pattern, limit
-    )
-    .fetch_all(&state.db)
-    .await?;
+        params![&pattern, limit],
+    ).await?;
 
-    // Parental control: the search query is a `query!` macro backed by the
-    // shipped `.sqlx` cache, so the age limit is applied here, in Rust, on the
-    // rows it returned. The certifications are read separately. A result page
-    // may therefore come back shorter; the HARD gate stays in `handlers::stream`.
-    // Administrators are never filtered.
+    // Parental control: applied here, in Rust, on the rows the search returned.
+    // The certifications are read separately. A result page may therefore come
+    // back shorter; the HARD gate stays in `handlers::stream`. Admins are never
+    // filtered.
     let cfg = state.instance();
     let movie_visible: Option<std::collections::HashSet<Uuid>> =
         if cfg.parental_active() && user.role != "admin" {

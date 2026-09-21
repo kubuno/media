@@ -1436,6 +1436,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "kubuno-db"
+version = "0.6.0"
+source = "git+https://github.com/kubuno/core?tag=db-v0.6.0#43f1f7318dffa245be9d59c5f6fed6bbea7970c1"
+dependencies = [
+ "chrono",
+ "rust-stemmers",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "unicode-normalization",
+ "uuid",
+]
+
+[[package]]
 name = "kubuno-media"
 version = "0.1.8"
 dependencies = [
@@ -1453,6 +1470,7 @@ dependencies = [
  "hex",
  "http-range",
  "id3",
+ "kubuno-db",
  "kubuno-modauth",
  "kubuno-storage",
  "metaflac",
@@ -1464,6 +1482,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tokio-util",
@@ -1537,6 +1556,7 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
+ "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -2152,6 +2172,16 @@ checksum = "3e0698206bcb8882bf2a9ecb4c1e7785db57ff052297085a6efd4fe42302068a"
 dependencies = [
  "cfg-if",
  "ordered-multimap",
+]
+
+[[package]]
+name = "rust-stemmers"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e46a2036019fdb888131db7a4c847a1063a7493f971ed94ea82c67eada63ca54"
+dependencies = [
+ "serde",
+ "serde_derive",
 ]
 
 [[package]]
