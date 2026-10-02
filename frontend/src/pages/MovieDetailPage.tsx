@@ -12,6 +12,7 @@ import { useMediaVideoStore } from '../store/mediaVideoStore'
 import { useTrailerStore } from '../store/trailerStore'
 import { useIdentifyStore } from '../store/identifyStore'
 import { Button, MenuDropdown, useMenuDropdown, type MenuItem } from '@ui'
+import { SignedImg } from '../components/SignedImg'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ function CastCard({ member }: { member: CastMember }) {
     <div className="flex-shrink-0 w-24 text-center">
       <div className="w-24 h-24 rounded-full overflow-hidden bg-surface-2 mx-auto mb-2 flex items-center justify-center">
         {src
-          ? <img src={src} alt={member.name} className="w-full h-full object-cover" loading="lazy" />
+          ? <SignedImg src={src} alt={member.name} className="w-full h-full object-cover" loading="lazy" />
           : <span className="text-2xl text-text-tertiary font-bold">{member.name.charAt(0)}</span>
         }
       </div>
@@ -109,7 +110,7 @@ function PosterSelectorModal({
                     isCurrent ? 'border-primary' : 'border-transparent hover:border-primary/50'
                   }`}
                 >
-                  <img
+                  <SignedImg
                     src={url}
                     alt={`Affiche ${i + 1}`}
                     className="w-full h-full object-cover"
@@ -264,7 +265,7 @@ export default function MovieDetailPage() {
       {/* Hero */}
       <div className="relative flex-shrink-0 mx-6 mt-4 rounded-2xl overflow-hidden bg-surface-2" style={{ minHeight: 220 }}>
         {backdrop && !imgError && (
-          <img
+          <SignedImg
             src={backdrop}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
@@ -279,7 +280,7 @@ export default function MovieDetailPage() {
           {poster && (
             <div className="hidden sm:flex flex-col items-center gap-2 flex-shrink-0">
               <div className="w-28 h-40 rounded-xl overflow-hidden shadow-2xl">
-                <img src={poster} alt={movie.title} className="w-full h-full object-cover" />
+                <SignedImg src={poster} alt={movie.title} className="w-full h-full object-cover" />
               </div>
               {allPosters.length > 1 && (
                 <button

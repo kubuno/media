@@ -16,6 +16,7 @@ import { useMediaSearchStore } from '../store/mediaSearchStore'
 import { useIdentifyStore } from '../store/identifyStore'
 import { DARK_PAGE } from '../darkTheme'
 import { QUEUE_DRAG_TYPE } from '../components/listen/player/QueuePanel'
+import { SignedImg } from '../components/SignedImg'
 
 function trackToPlayerTrack(t: Track): PlayerTrack {
   return {
@@ -70,7 +71,7 @@ function ArtistCard({ artist, onClick }: { artist: Artist; onClick: () => void }
          className="group cursor-pointer text-center rounded-2xl p-3 transition-all duration-300 hover:bg-white/5">
       <div className="aspect-square rounded-full overflow-hidden mb-3 relative mx-auto w-full ring-1 ring-white/10 group-hover:ring-2 group-hover:ring-blue-400/50 shadow-lg transition-all duration-300 bg-white/5">
         {img
-          ? <img src={img} alt={artist.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
+          ? <SignedImg src={img} alt={artist.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center"><Mic2 className="w-10 h-10 text-white/40" /></div>
         }
         <button
@@ -121,7 +122,7 @@ function AlbumCard({ album, onClick }: { album: Album; onClick: () => void }) {
          className="group cursor-pointer rounded-2xl p-3 bg-transparent hover:bg-white/[0.06] transition-all duration-300 hover:-translate-y-1">
       <div className="aspect-square rounded-xl relative overflow-hidden shadow-lg bg-white/5">
         {cover
-          ? <img src={cover} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+          ? <SignedImg src={cover} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center"><Disc3 className="w-12 h-12 text-white/40" /></div>
         }
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -722,7 +723,7 @@ function AlbumDetailView({ albumId }: { albumId: string }) {
       <div className="flex gap-6 mb-8 items-end">
         <div className="w-40 h-40 rounded-xl overflow-hidden flex-shrink-0 bg-surface-2 flex items-center justify-center shadow-md">
           {cover
-            ? <img src={cover} alt={album.title} className="w-full h-full object-cover" />
+            ? <SignedImg src={cover} alt={album.title} className="w-full h-full object-cover" />
             : <Disc3 className="w-12 h-12 text-text-tertiary" />
           }
         </div>
@@ -842,7 +843,7 @@ function ArtistDetailView({ artistId }: { artistId: string }) {
       <div className="flex gap-6 mb-8 items-end">
         <div className="w-36 h-36 rounded-full overflow-hidden flex-shrink-0 bg-surface-2 flex items-center justify-center shadow-md">
           {data.image_path
-            ? <img src={data.image_path} alt={data.name} className="w-full h-full object-cover" />
+            ? <SignedImg src={data.image_path} alt={data.name} className="w-full h-full object-cover" />
             : <Mic2 className="w-12 h-12 text-text-tertiary" />
           }
         </div>

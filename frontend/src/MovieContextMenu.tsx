@@ -8,6 +8,7 @@ import {
   Download, UserPlus, History, Info,
 } from 'lucide-react'
 import { MenuDropdown, type MenuItem } from '@ui'
+import { downloadSignedUrl } from '@kubuno/sdk'
 import { mediaApi, type Movie } from './api'
 import { useMediaQueueStore } from './store/mediaQueueStore'
 import { useTrailerStore } from './store/trailerStore'
@@ -138,7 +139,7 @@ export default function MovieContextMenu({ movie, position, onClose }: Props) {
     }) },
     { type: 'action', icon: <Unlink    className="w-4 h-4" />, label: t('media_menu_dissociate'),   onClick: handleDissociate },
     { type: 'action', icon: <Zap       className="w-4 h-4" />, label: t('media_menu_optimize'),     onClick: () => showToast(t('media_toast_coming_soon')) },
-    { type: 'action', icon: <Download  className="w-4 h-4" />, label: t('media_menu_save_file'),    onClick: () => { window.open(mediaApi.streamUrl(movie.id)) } },
+    { type: 'action', icon: <Download  className="w-4 h-4" />, label: t('media_menu_save_file'),    onClick: () => { void downloadSignedUrl(mediaApi.streamUrl(movie.id), movie.file_path?.split(/[\\/]/).pop() || movie.title) } },
     { type: 'action', icon: <UserPlus  className="w-4 h-4" />, label: t('media_menu_grant_access'), onClick: () => showToast(t('media_toast_coming_soon')) },
     { type: 'separator' },
     { type: 'action', icon: <History className="w-4 h-4" />, label: t('media_menu_view_history'),   onClick: handleViewHistory },

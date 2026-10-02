@@ -1,6 +1,15 @@
 import { create } from 'zustand'
+import { signedUrl } from '@kubuno/sdk'
 import { registerMediaActivitySource } from './mediaActivity'
 import type { PlayerTrack } from './playerStore'
+
+/** Bare stream URL of a track (tracks never store ticketed URLs). */
+const trackStreamUrl = (t: PlayerTrack): string => t.streamUrl ?? `/api/v1/media/audio/${t.id}/stream`
+
+/** Ticketed form of a stream URL (unchanged for blob:/external URLs). On
+ *  failure the bare URL is returned: the request then fails as before. */
+const signedStreamUrl = (url: string): Promise<string> =>
+  signedUrl(url, { purpose: 'stream' }).catch(() => url)
 
 // ── Hot cue palette ───────────────────────────────────────────────────────────
 
@@ -247,16 +256,38 @@ export class DJDeckEngine {
   /** Swap the <audio> source (e.g. to a pre-separated HQ stem) while preserving
    *  the playhead and play/pause state, so all transport keeps working. */
   setStemSource(url: string, isStem: boolean) {
-    const t = this.audio.currentTime, playing = !this.audio.paused
     this.onStem = isStem
-    this.audio.src = url
-    this.audio.load()
-    const onCan = () => {
-      try { this.audio.currentTime = t } catch { /* not seekable yet */ }
-      if (playing) this.audio.play().catch(() => {})
-      this.audio.removeEventListener('canplay', onCan)
-    }
-    this.audio.addEventListener('canplay', onCan, { once: true })
+    this.withStreamUrl(url, src => {
+      const t = this.audio.currentTime, playing = !this.audio.paused
+      this.audio.src = src
+      this.audio.load()
+      const onCan = () => {
+        try { this.audio.currentTime = t } catch { /* not seekable yet */ }
+        if (playing) this.audio.play().catch(() => {})
+        this.audio.removeEventListener('canplay', onCan)
+      }
+      this.audio.addEventListener('canplay', onCan, { once: true })
+    })
+  }
+
+  /** Bumped on every source change: a ticket fetched for an older change is dropped. */
+  private srcSeq = 0
+
+  /** Resolve the ticketed form of a bare stream URL, then run `apply` unless a
+   *  newer source change started in the meantime. */
+  private withStreamUrl(url: string, apply: (src: string) => void) {
+    const seq = ++this.srcSeq
+    void signedStreamUrl(url).then(src => { if (seq === this.srcSeq) apply(src) })
+  }
+
+  /** Point the <audio> at a bare stream URL (a ticket is added here), load it,
+   *  then run `after` (e.g. start playback). */
+  loadStream(url: string, after?: () => void) {
+    this.withStreamUrl(url, src => {
+      this.audio.src = src
+      this.audio.load()
+      after?.()
+    })
   }
 
   /** Attach the STFT spectral separator worklet once its module is loaded. */
@@ -1518,8 +1549,7 @@ for (const deck of ['A', 'B'] as const) {
   const snap = _djSnap?.[deck === 'A' ? 'deckA' : 'deckB']
   if (snap?.track) {
     const eng = engine(deck)
-    eng.audio.src = snap.track.streamUrl ?? `/api/v1/media/audio/${snap.track.id}/stream`
-    eng.audio.load()
+    eng.loadStream(trackStreamUrl(snap.track))
     const savedPos = snap.position ?? 0
     if (savedPos > 0) {
       eng.audio.addEventListener('canplay', function seek() {
@@ -1681,7 +1711,7 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       const id = st.track?.id
       const hq = id ? _stemCache[id] : undefined
       const eng = engine(deck)
-      const orig = st.track ? (st.track.streamUrl ?? `/api/v1/media/audio/${id}/stream`) : null
+      const orig = st.track ? trackStreamUrl(st.track) : null
       if (hq && (mode === 'acapella' || mode === 'instrumental')) {
         // HQ stems available → play the pre-separated source, keep the live processor dry.
         eng.setStem('full')
@@ -1705,10 +1735,10 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       initDJContext()
       if (!_djCtx) return
       set({ separating: deck, sepProgress: 0 })
-      const url = track.streamUrl ?? `/api/v1/media/audio/${id}/stream`
+      const url = trackStreamUrl(track)
       ;(async () => {
         try {
-          const resp = await fetch(url)
+          const resp = await fetch(await signedStreamUrl(url))
           const arr  = await resp.arrayBuffer()
           const buf  = await _djCtx!.decodeAudioData(arr)
           const out  = await separateOffline(buf, p => set({ sepProgress: p }))
@@ -1736,8 +1766,7 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       initDJContext()
       const eng = engine(deck)
       eng.audio.pause()
-      eng.audio.src = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
-      eng.audio.load()
+      eng.loadStream(trackStreamUrl(track))
       eng.onStem = false; eng.setStem('full')   // new track = original source, no stem yet
       const k = dk(deck)
       const m = trackMeta(track.id)
@@ -1761,8 +1790,7 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       const track = tracks[idx]
       const eng   = engine(deck)
       eng.audio.pause()
-      eng.audio.src = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
-      eng.audio.load()
+      eng.loadStream(trackStreamUrl(track))
       eng.onStem = false; eng.setStem('full')
       const k = dk(deck)
       const m = trackMeta(track.id)
@@ -1814,9 +1842,7 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       const track = st.queue[idx]
       const eng   = engine(deck)
       eng.audio.pause()
-      eng.audio.src = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
-      eng.audio.load()
-      eng.audio.play().catch(() => {})
+      eng.loadStream(trackStreamUrl(track), () => { eng.audio.play().catch(() => {}) })
       const m = trackMeta(track.id)
       set(s => ({
         [k]: {
@@ -1845,9 +1871,7 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       const track = st.queue[idx]
       const eng   = engine(deck)
       eng.audio.pause()
-      eng.audio.src = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
-      eng.audio.load()
-      if (st.isPlaying) eng.audio.play().catch(() => {})
+      eng.loadStream(trackStreamUrl(track), () => { if (st.isPlaying) eng.audio.play().catch(() => {}) })
       const m = trackMeta(track.id)
       set(s => ({
         [k]: {
@@ -1870,9 +1894,7 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       const track = st.queue[idx]
       const eng   = engine(deck)
       eng.audio.pause()
-      eng.audio.src = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
-      eng.audio.load()
-      eng.audio.play().catch(() => {})
+      eng.loadStream(trackStreamUrl(track), () => { eng.audio.play().catch(() => {}) })
       const m = trackMeta(track.id)
       set(s => ({
         [k]: {
@@ -2256,20 +2278,23 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       const ok = dk(other)
       const eng = engine(other)
       initDJContext()
-      eng.audio.src = st.track.streamUrl ?? `/api/v1/media/audio/${st.track.id}/stream`
-      eng.audio.load()
       const pos = st.position
-      eng.audio.addEventListener('canplay', function seek() {
-        eng.audio.currentTime = pos
-        eng.audio.play().catch(() => {})
-        eng.audio.removeEventListener('canplay', seek)
-      }, { once: true })
+      const rate = Math.max(0.06, Math.min(4, 1 + st.pitch / 100))
+      eng.loadStream(trackStreamUrl(st.track), () => {
+        eng.audio.addEventListener('canplay', function seek() {
+          eng.audio.currentTime = pos
+          eng.audio.play().catch(() => {})
+          eng.audio.removeEventListener('canplay', seek)
+        }, { once: true })
+        // Set after load(), which resets the playback rate.
+        eng.audio.playbackRate = rate
+      })
       set(s => ({ [ok]: {
         ...s[ok], track: st.track, isPlaying: true, isLoading: true,
         position: pos, duration: st.duration, pitch: st.pitch, bpm: st.bpm,
         queue: [], queueIndex: -1, cuePoint: 0, isLooping: false, loopIn: null, loopOut: null,
       } }))
-      eng.audio.playbackRate = Math.max(0.06, Math.min(4, 1 + st.pitch / 100))
+      eng.audio.playbackRate = rate
     },
     setAutoMix(on) { set({ autoMix: on }) },
     toggleMic() {
@@ -2306,11 +2331,11 @@ export const useDJStore = create<DJStoreState>((set, get) => {
       if (!st.track || get().analyzing) return
       initDJContext()
       if (!_djCtx) return
-      const url = st.track.streamUrl ?? `/api/v1/media/audio/${st.track.id}/stream`
+      const url = trackStreamUrl(st.track)
       set({ analyzing: deck })
       ;(async () => {
         try {
-          const resp = await fetch(url, { credentials: 'include' })
+          const resp = await fetch(await signedStreamUrl(url))
           const arr = await resp.arrayBuffer()
           const audio = await _djCtx!.decodeAudioData(arr)
           const res = analyzeBuffer(audio)

@@ -10,6 +10,7 @@ import {
   type MovieCandidate, type ShowCandidate, type ArtistCandidate, type AlbumCandidate,
 } from './api'
 import { useIdentifyStore, type IdentifyTarget } from './store/identifyStore'
+import { SignedImg } from './components/SignedImg'
 
 // One dialog, four kinds of candidates. The union keeps a single result list.
 type AnyCandidate =
@@ -79,7 +80,7 @@ function CandidateCard({
     <div className="flex gap-3 p-3 rounded-xl border border-border bg-surface-1 hover:border-primary/50 transition-colors">
       <div className="w-14 h-20 rounded-lg overflow-hidden bg-surface-2 flex-shrink-0 flex items-center justify-center">
         {poster
-          ? <img src={poster} alt="" className="w-full h-full object-cover" loading="lazy" />
+          ? <SignedImg src={poster} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <Icon className="w-6 h-6 text-text-tertiary" />
         }
       </div>

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { FloatingWindow, RangeSlider } from '@ui'
 import { filesApi, formatSize, type FileItem } from '@kubuno/drive'
+import { useSignedUrl, downloadSignedUrl } from '@kubuno/sdk'
 import { useWindowZStore } from '@ui'
 import { WindowTitle } from './components/WindowTitle'
 
@@ -196,6 +197,9 @@ interface Props {
 
 export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, initialPosition, onInitialPositionConsumed, onTimeUpdate }: Props) {
   const { t } = useTranslation('media')
+  // Bare URL (never stored with a ticket); the <video> gets a signed stream URL.
+  const rawSrc       = srcOverride ?? filesApi.downloadUrl(file.id)
+  const videoSrc     = useSignedUrl(rawSrc, { purpose: 'stream' })
   const videoRef     = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const hideTimer    = useRef<number | undefined>(undefined)
@@ -423,7 +427,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
           >
             <video
               ref={videoRef}
-              src={srcOverride ?? filesApi.downloadUrl(file.id)}
+              src={videoSrc}
               autoPlay
               className="max-w-full max-h-full pointer-events-none"
             />
@@ -542,11 +546,11 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
 
                 {/* Download */}
                 <a
-                  href={srcOverride ?? filesApi.downloadUrl(file.id)}
+                  href={rawSrc}
                   download={file.name}
                   className="p-1.5 text-white/55 hover:text-white transition-colors flex-shrink-0"
                   title={t('media_player_download')}
-                  onClick={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); e.preventDefault(); void downloadSignedUrl(rawSrc, file.name) }}
                 ><Download size={14} /></a>
 
                 {/* Fullscreen */}

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { signedUrl } from '@kubuno/sdk'
 import { registerMediaActivitySource } from './mediaActivity'
 
 export interface PlayerTrack {
@@ -73,6 +74,25 @@ audioB.preload = 'auto'
 let activeEl: HTMLAudioElement = audio
 const inactiveEl = (): HTMLAudioElement => (activeEl === audio ? audioB : audio)
 
+// ── Stream URLs ───────────────────────────────────────────────────────────────
+// Tracks keep storing BARE URLs (persisted in the session snapshot, matched by
+// the UI); a signed stream ticket is added only when assigning to an element.
+
+const trackStreamUrl = (t: PlayerTrack): string => t.streamUrl ?? `/api/v1/media/audio/${t.id}/stream`
+
+/** Ticketed stream URL for `t`. On failure the bare URL is used: the element
+ *  then reports an error exactly as an unreachable stream would. */
+const signedTrackUrl = (t: PlayerTrack): Promise<string> => {
+  const url = trackStreamUrl(t)
+  return signedUrl(url, { purpose: 'stream' }).catch(() => url)
+}
+
+/** Bumped by every load/crossfade request; an async ticket fetch only applies
+ *  its result if no newer request started in the meantime. */
+let loadSeq = 0
+/** A crossfade is waiting for its ticket (prevents duplicate auto-starts). */
+let xfStarting = false
+
 // ── Crossfade controller (module-level, isolated from React) ──────────────────
 
 const xf = {
@@ -88,6 +108,7 @@ const xf = {
 function stopXfRamp() { if (xf.raf) cancelAnimationFrame(xf.raf); xf.raf = 0 }
 /** Abort an in-flight crossfade (e.g. user picked another track / seeked). */
 function cancelCrossfade() {
+  if (xfStarting) { xfStarting = false; loadSeq++ }
   if (!xf.active) return
   stopXfRamp()
   if (xf.incoming) { try { xf.incoming.pause() } catch { /* ignore */ } xf.incoming.src = ''; xf.incoming.volume = 0 }
@@ -129,11 +150,16 @@ function saveSnapshot(snap: Snapshot) {
 // Restore audio element src before store creation so it starts buffering early.
 const _snap = loadSnapshot()
 if (_snap?.track) {
-  audio.src          = _snap.track.streamUrl ?? `/api/v1/media/audio/${_snap.track.id}/stream`
   audio.volume       = _snap.volume ?? 1
   audio.playbackRate = _snap.playbackRate ?? 1
-  // Kick off loading immediately so metadata/duration are ready for the seek.
-  audio.load()
+  const seq = loadSeq
+  void signedTrackUrl(_snap.track).then(src => {
+    // Skip if the user already started another track meanwhile.
+    if (seq !== loadSeq) return
+    audio.src = src
+    // Kick off loading immediately so metadata/duration are ready for the seek.
+    audio.load()
+  })
 }
 
 /** If autoplay is blocked (no user gesture after reload), resume on the first
@@ -200,6 +226,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
    *  becomes the new outgoing AT ITS CURRENT VOLUME (no jump), the old outgoing is
    *  freed for the new track. */
   const crossfadeTo = (track: PlayerTrack, queue: PlayerTrack[], index: number, fadeSecs: number) => {
+    // Fetch the stream ticket first, then run the whole crossfade at once so the
+    // fade-out never starts before the incoming element has its source.
+    const seq = ++loadSeq
+    xfStarting = true
+    void signedTrackUrl(track).then(src => {
+      if (seq !== loadSeq) return
+      xfStarting = false
+      startCrossfade(track, queue, index, fadeSecs, src)
+    })
+  }
+
+  const startCrossfade = (track: PlayerTrack, queue: PlayerTrack[], index: number, fadeSecs: number, src: string) => {
     const st = get()
     let out: HTMLAudioElement
     let inc: HTMLAudioElement
@@ -218,7 +256,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       inc         = inactiveEl()
       outStartVol = st.volume
     }
-    inc.src          = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
+    inc.src          = src
     inc.playbackRate = st.playbackRate
     inc.volume       = 0
     try { inc.currentTime = 0 } catch { /* ignore */ }
@@ -255,10 +293,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
   const loadAndPlay = (track: PlayerTrack, queue: PlayerTrack[], index: number) => {
     cancelCrossfade()
     const el = activeEl
-    el.src          = track.streamUrl ?? `/api/v1/media/audio/${track.id}/stream`
-    el.volume       = get().volume
-    el.playbackRate = get().playbackRate
-    el.play().catch(() => {})
+    const seq = ++loadSeq
+    void signedTrackUrl(track).then(src => {
+      if (seq !== loadSeq) return
+      el.src          = src
+      el.volume       = get().volume
+      el.playbackRate = get().playbackRate
+      el.play().catch(() => {})
+    })
     set({
       currentTrack: track,
       queue,
@@ -273,7 +315,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
   }
 
   const maybeStartCrossfade = (el: HTMLAudioElement) => {
-    if (xf.active) return
+    if (xf.active || xfStarting) return
     const st = get()
     if (st.crossfadeSecs <= 0 || !st.autoCrossfade) return
     if (!st.currentTrack || st.currentTrack.isRadio) return
@@ -513,6 +555,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     restore()  { set({ isMinimized: false }) },
     close() {
       cancelCrossfade()
+      loadSeq++
       audio.pause();  audio.src  = ''
       audioB.pause(); audioB.src = ''
       activeEl = audio

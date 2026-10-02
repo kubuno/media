@@ -14,6 +14,7 @@ import { DARK_PAGE } from '../darkTheme'
 import MediaLibrariesPanel from '../MediaLibrariesPanel'
 import { Button, MenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
 import MovieContextMenu, { type ContextMenuPosition } from '../MovieContextMenu'
+import { SignedImg } from '../components/SignedImg'
 
 // ── Poster card ───────────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ function MovieCard({ movie, onClick }: { movie: Movie; onClick: () => void }) {
         <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 group-hover:shadow-2xl transition-all duration-300"
              style={{ background: 'rgba(255,255,255,0.05)' }}>
           {poster
-            ? <img src={poster} alt={movie.title} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+            ? <SignedImg src={poster} alt={movie.title} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
             : <div className="w-full h-full flex items-center justify-center"><FilmIcon className="w-12 h-12 text-white/30" /></div>
           }
           {/* cinematic bottom gradient + meta on hover */}
@@ -88,7 +89,7 @@ function ShowCard({ show, onClick }: { show: TvShow; onClick: () => void }) {
       <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 group-hover:shadow-2xl transition-all duration-300"
            style={{ background: 'rgba(255,255,255,0.05)' }}>
         {poster
-          ? <img src={poster} alt={show.name} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+          ? <SignedImg src={poster} alt={show.name} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center"><Clapperboard className="w-12 h-12 text-white/30" /></div>
         }
         <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -128,7 +129,7 @@ function ContinueCard({ movie, onClick }: { movie: Movie; onClick: () => void })
     >
       <div className="w-16 h-24 flex-shrink-0 rounded overflow-hidden bg-surface-2 relative">
         {poster
-          ? <img src={poster} alt={movie.title} className="w-full h-full object-cover" />
+          ? <SignedImg src={poster} alt={movie.title} className="w-full h-full object-cover" />
           : <FilmIcon className="absolute inset-0 m-auto w-6 h-6 text-text-tertiary" />
         }
       </div>
@@ -276,7 +277,7 @@ function HomeTab() {
         <div className="relative rounded-2xl overflow-hidden mb-8 min-h-[260px] flex items-end"
              style={{ background: 'rgba(255,255,255,0.04)' }}>
           {heroBackdrop && (
-            <img src={heroBackdrop} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            <SignedImg src={heroBackdrop} alt="" className="absolute inset-0 w-full h-full object-cover" />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
@@ -355,7 +356,7 @@ function HomeTab() {
               <div className="aspect-[2/3] rounded-xl overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 transition-all"
                    style={{ background: 'rgba(255,255,255,0.05)' }}>
                 {posterUrl(w.poster_path)
-                  ? <img src={posterUrl(w.poster_path)!} alt={w.title ?? ''} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+                  ? <SignedImg src={posterUrl(w.poster_path)!} alt={w.title ?? ''} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
                   : <div className="w-full h-full flex items-center justify-center"><Bookmark className="w-10 h-10 text-white/30" /></div>}
               </div>
               <p className="text-sm font-semibold text-text-primary truncate pt-2 px-0.5">{w.title}</p>
@@ -403,7 +404,7 @@ function WatchlistTab() {
           <div className="aspect-[2/3] rounded-xl relative overflow-hidden shadow-lg ring-1 ring-white/5 group-hover:ring-blue-400/40 transition-all"
                style={{ background: 'rgba(255,255,255,0.05)' }}>
             {posterUrl(w.poster_path)
-              ? <img src={posterUrl(w.poster_path)!} alt={w.title ?? ''} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
+              ? <SignedImg src={posterUrl(w.poster_path)!} alt={w.title ?? ''} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500" loading="lazy" />
               : <div className="w-full h-full flex items-center justify-center"><Bookmark className="w-10 h-10 text-white/30" /></div>}
             <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/70 text-white text-[10px] font-semibold uppercase tracking-wide">
               {w.item_type === 'show' ? 'Série' : 'Film'}

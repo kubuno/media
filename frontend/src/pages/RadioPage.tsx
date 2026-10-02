@@ -9,6 +9,7 @@ import { useConfirm } from '@kubuno/sdk'
 import { mediaApi, type RadioStation, type RadioDiscoverResult } from '../api'
 import { usePlayerStore } from '../store/playerStore'
 import { DARK_PAGE } from '../darkTheme'
+import { SignedImg } from '../components/SignedImg'
 
 type Tab = 'all' | 'favorites' | 'recent' | 'mine'
 
@@ -68,7 +69,7 @@ function StationCard({ st, onFav, onEdit, onDelete }: {
           title={t('media_radio_play')}
         >
           {st.favicon
-            ? <img src={st.favicon} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            ? <SignedImg src={st.favicon} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             : <Radio size={24} className="text-primary/60" />}
           <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
             {playing ? <Pause size={20} className="text-white" fill="white" /> : <Play size={20} className="text-white" fill="white" />}
@@ -220,7 +221,7 @@ function DiscoverDialog({ onClose, onAdd }: {
             {results.map((r, i) => (
               <div key={i} className="flex items-center gap-3 rounded-lg border border-border p-2 hover:bg-surface-2">
                 <div className="w-9 h-9 rounded-md bg-surface-3 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {r.favicon ? <img src={r.favicon} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} /> : <Radio size={16} className="text-text-tertiary" />}
+                  {r.favicon ? <SignedImg src={r.favicon} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} /> : <Radio size={16} className="text-text-tertiary" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-text-primary truncate">{r.name}</p>

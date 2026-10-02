@@ -9,6 +9,7 @@ import { Button, MenuDropdown, useMenuDropdown, type MenuItem } from '@ui'
 import { mediaApi, posterUrl, type TvEpisode } from '../api'
 import { useMediaVideoStore } from '../store/mediaVideoStore'
 import { useIdentifyStore } from '../store/identifyStore'
+import { SignedImg } from '../components/SignedImg'
 
 interface ShowCast { name: string; character?: string; profile_path?: string | null }
 
@@ -67,7 +68,7 @@ function EpisodeRow({ ep, showName, seasonNumber }: {
         className="relative flex-shrink-0 w-40 aspect-video rounded-lg overflow-hidden bg-surface-3 flex items-center justify-center"
         title="Lire l'épisode">
         {still
-          ? <img src={still} alt="" className="w-full h-full object-cover" loading="lazy" />
+          ? <SignedImg src={still} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <Clapperboard className="w-8 h-8 text-text-tertiary" />}
         <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
           <span className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: '#2f7dff' }}>
@@ -204,7 +205,7 @@ export default function ShowDetailPage() {
       {/* Hero */}
       <div className="relative flex-shrink-0 mx-6 mt-4 rounded-2xl overflow-hidden bg-surface-2" style={{ minHeight: 220 }}>
         {backdrop && (
-          <img src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <SignedImg src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )}
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
@@ -212,7 +213,7 @@ export default function ShowDetailPage() {
         <div className="relative flex items-end gap-6 p-6 min-h-[220px]">
           {poster && (
             <div className="hidden sm:block w-28 h-40 rounded-xl overflow-hidden shadow-2xl flex-shrink-0">
-              <img src={poster} alt={show.name} className="w-full h-full object-cover" />
+              <SignedImg src={poster} alt={show.name} className="w-full h-full object-cover" />
             </div>
           )}
 
@@ -316,7 +317,7 @@ export default function ShowDetailPage() {
                 <div key={i} className="flex-shrink-0 w-24 text-center">
                   <div className="w-24 h-24 rounded-full overflow-hidden bg-surface-2 mx-auto mb-2 flex items-center justify-center">
                     {m.profile_path
-                      ? <img src={m.profile_path.startsWith('http') ? m.profile_path : posterUrl(m.profile_path, 'w185')!} alt={m.name} className="w-full h-full object-cover" loading="lazy" />
+                      ? <SignedImg src={m.profile_path.startsWith('http') ? m.profile_path : posterUrl(m.profile_path, 'w185')!} alt={m.name} className="w-full h-full object-cover" loading="lazy" />
                       : <span className="text-2xl text-text-tertiary font-bold">{m.name.charAt(0)}</span>}
                   </div>
                   <p className="text-xs font-medium text-text-primary leading-tight truncate">{m.name}</p>

@@ -5,9 +5,10 @@ import {
   Tv, Heart, HeartOff, Plus, Search, Play, Trash2, X, Globe, Loader2, Link2, ExternalLink, Maximize,
 } from 'lucide-react'
 import { Button, Input, ConfirmDialog, MenuDropdown, type MenuDropdownPos, type MenuItem } from '@ui'
-import { useConfirm } from '@kubuno/sdk'
+import { useConfirm, useAuthStore, signedUrl } from '@kubuno/sdk'
 import { mediaApi, type TvChannel, type TvDiscoverResult } from '../api'
 import { DARK_PAGE } from '../darkTheme'
+import { SignedImg } from '../components/SignedImg'
 
 type Tab = 'all' | 'favorites' | 'recent' | 'mine'
 
@@ -30,8 +31,12 @@ function LivePlayer({ channel, onClose }: { channel: TvChannel; onClose: () => v
       const v = videoRef.current
       if (!v) return
       if (v.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS (Safari)
-        v.src = src
+        // Native HLS (Safari): only the master URL can carry a ticket. The
+        // sub-playlist/segment requests (rewritten through the module's proxy)
+        // still depend on the deprecated compatibility cookie — known limit.
+        const signed = await signedUrl(src, { purpose: 'stream' }).catch(() => src)
+        if (cancelled) return
+        v.src = signed
         v.play().catch(() => {})
         return
       }
@@ -41,7 +46,18 @@ function LivePlayer({ channel, onClose }: { channel: TvChannel; onClose: () => v
         setError('Lecture HLS non supportée par ce navigateur.')
         return
       }
-      const instance = new Hls({ maxBufferLength: 20 })
+      const instance = new Hls({
+        maxBufferLength: 20,
+        // XHR can carry the bearer: playlists and segments (all proxied by the
+        // module) are authenticated without a ticket. Token read per request so
+        // refreshes are picked up; never sent to another origin.
+        xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+          const token = useAuthStore.getState().accessToken
+          let sameOrigin = false
+          try { sameOrigin = new URL(url, window.location.origin).origin === window.location.origin } catch { /* invalid URL */ }
+          if (token && sameOrigin) xhr.setRequestHeader('Authorization', 'Bearer ' + token)
+        },
+      })
       hls = instance
       instance.loadSource(src)
       instance.attachMedia(v)
@@ -70,7 +86,7 @@ function LivePlayer({ channel, onClose }: { channel: TvChannel; onClose: () => v
     <div className="mb-6 rounded-2xl overflow-hidden border border-white/10 bg-black shadow-2xl">
       <div className="flex items-center justify-between px-4 py-2.5 bg-white/[0.04]">
         <div className="flex items-center gap-2.5 min-w-0">
-          {channel.logo && <img src={channel.logo} alt="" className="w-6 h-6 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+          {channel.logo && <SignedImg src={channel.logo} alt="" className="w-6 h-6 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
           <p className="text-sm font-semibold text-white truncate">{channel.name}</p>
           <span className="flex items-center gap-1.5 flex-shrink-0 px-1.5 py-0.5 rounded bg-red-600/90 text-white text-[10px] font-bold uppercase tracking-wide">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Direct
@@ -131,7 +147,7 @@ function ChannelCard({ ch, active, onPlay, onFav, onDelete }: {
           title="Regarder"
         >
           {ch.logo
-            ? <img src={ch.logo} alt="" className="w-full h-full object-contain p-1" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            ? <SignedImg src={ch.logo} alt="" className="w-full h-full object-contain p-1" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
             : <Tv size={22} className="text-primary/60" />}
           <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
             <Play size={20} className="text-white" fill="white" />
@@ -272,7 +288,7 @@ function DiscoverDialog({ onClose, onAdd }: {
             {results.map((r, i) => (
               <div key={i} className="flex items-center gap-3 rounded-lg border border-border p-2 hover:bg-surface-2">
                 <div className="w-12 h-9 rounded-md bg-surface-3 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {r.logo ? <img src={r.logo} alt="" className="w-full h-full object-contain p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} /> : <Tv size={16} className="text-text-tertiary" />}
+                  {r.logo ? <SignedImg src={r.logo} alt="" className="w-full h-full object-contain p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} /> : <Tv size={16} className="text-text-tertiary" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-text-primary truncate">{r.name}</p>

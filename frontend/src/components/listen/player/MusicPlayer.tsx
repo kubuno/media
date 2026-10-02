@@ -17,6 +17,7 @@ import { EqualizerPanel } from './EqualizerPanel'
 import { QueuePanel, QUEUE_DRAG_TYPE } from './QueuePanel'
 import { WindowTitle } from '../../WindowTitle'
 import type { PlayerTrack } from '../../../store/playerStore'
+import { SignedImg } from '../../SignedImg'
 
 // ── Drag-a-track-onto-the-player drop zone ────────────────────────────────────
 // Dragging a track from any browse view onto the player adds it to the queue
@@ -98,7 +99,7 @@ function CoverArt({ url, size = 48 }: { url?: string; size?: number }) {
       style={{ width: size, height: size }}
     >
       {url ? (
-        <img src={url} alt="" className="w-full h-full object-cover" />
+        <SignedImg src={url} alt="" className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/35 via-primary/15 to-transparent">
           <div className="absolute inset-0 opacity-60"
@@ -675,7 +676,7 @@ function FullPlayer({ onMinimize, onClose }: {
               bottom and create a phantom vertical scrollbar. */}
           <div className="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
             {currentTrack?.coverUrl
-              ? <img src={currentTrack.coverUrl} alt="" className="w-full h-full object-cover blur-3xl scale-150 opacity-40" />
+              ? <SignedImg src={currentTrack.coverUrl} alt="" className="w-full h-full object-cover blur-3xl scale-150 opacity-40" />
               : <div className="w-full h-full bg-gradient-to-br from-primary/20 to-transparent" />}
             <div className="absolute inset-0 bg-gradient-to-b from-surface-0/55 via-surface-0/85 to-surface-0" />
           </div>

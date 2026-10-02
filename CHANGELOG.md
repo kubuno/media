@@ -24,6 +24,12 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 ### Security
 
+- **Music, radio and video playback, covers and posters, file saving and the DJ deck no longer rely on the
+  access-token cookie the web client used to keep readable by page scripts**; they use short-lived signed
+  tickets (long enough for a whole film, revoked when you sign out). Live TV through hls.js sends your
+  session with each request. Known limit: on browsers that play HLS natively without Media Source
+  Extensions (Safari), live TV segments still depend on the core's temporary compatibility cookie.
+  Requires a Kubuno core that issues signed tickets (`POST /api/v1/auth/tickets`) and `@kubuno/sdk` with the signed-URL helpers.
 - **Security fixes from the shared database layer (kubuno-db 0.9.0).** The
   database password can no longer appear in a log through the debug output of
   the database settings.

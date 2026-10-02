@@ -13,6 +13,7 @@ import { useDJStore, djEngine, djMasterAnalyser, djTrackPeaks, djStemReady, EQ_P
          type CrossfaderCurve, type DeckState, type PadMode, type ColorFx, type HotCue, type WaveStyle,
          type DeckId, type DeckCount, type StemMode, type XfAssign } from '../store/djStore'
 import { mediaApi, formatDuration, posterUrl } from '../api'
+import { SignedImg } from '../components/SignedImg'
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 // Hardware look: matte charcoal chassis (Pioneer-style) with neon deck accents.
@@ -1472,7 +1473,7 @@ function DJDeck({ deck, color, compact = false }: { deck: DeckId; color: string;
             boxShadow: st.track?.coverUrl ? `0 0 18px ${rgba(color, 0.3)}` : 'none',
           }}>
             {st.track?.coverUrl
-              ? <img src={st.track.coverUrl} alt="" className="w-full h-full object-cover" />
+              ? <SignedImg src={st.track.coverUrl} alt="" className="w-full h-full object-cover" />
               : <div className="w-full h-full flex items-center justify-center">
                   <Music className="w-12 h-12" style={{ color: UI.dim }} />
                 </div>
@@ -1882,7 +1883,7 @@ function DJDeckCompact({ deck, color }: { deck: DeckId; color: string }) {
       <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
         <div className="rounded-md flex-shrink-0 overflow-hidden" style={{ width: 44, height: 44, background: UI.well, border: `1px solid ${rgba(color, 0.3)}` }}>
           {st.track?.coverUrl
-            ? <img src={st.track.coverUrl} alt="" className="w-full h-full object-cover" />
+            ? <SignedImg src={st.track.coverUrl} alt="" className="w-full h-full object-cover" />
             : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5" style={{ color: UI.dim }} /></div>}
         </div>
         <div className="flex-1 min-w-0">
