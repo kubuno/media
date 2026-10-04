@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "Media (Kubuno Core + browser)",
+    "Projects": [
+      {
+        "Path": "Kubuno.Media.Server.rsproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "frontend\\Kubuno.Media.Web.esproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
