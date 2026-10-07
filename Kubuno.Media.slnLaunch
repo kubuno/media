@@ -3,11 +3,11 @@
     "Name": "Media (Kubuno Core + browser)",
     "Projects": [
       {
-        "Path": "Kubuno.Media.Server.rsproj",
+        "Path": "server\\Kubuno.Media.Server.rsproj",
         "Action": "Start"
       },
       {
-        "Path": "frontend\\Kubuno.Media.Web.esproj",
+        "Path": "web\\Kubuno.Media.Web.esproj",
         "Action": "Start"
       }
     ]

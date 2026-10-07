@@ -96,8 +96,9 @@ Settings are split between per-user preferences and admin configuration (librari
 
 Media is a **separate process** (a standalone Rust binary listening on port **3113**) that registers with the [core](https://github.com/kubuno/core) at startup. The core proxies its routes (`/api/v1/media/*`), distributes platform events to it and manages its lifecycle; it also serves the module's runtime-loaded React frontend bundle through the host import map.
 
-- **Backend** — `src/`: Axum on the shared `kubuno-db` layer, running on **PostgreSQL, MySQL/MariaDB or SQLite** (the engine is an administrator choice read at run time — one binary, no rebuild), in a dedicated `media` schema; migrations in `migrations/`. Video transcoding (HLS) runs through FFmpeg. Proxied requests are authenticated from a signed `X-Kubuno-Auth` token minted by the core, never from plain forwarded headers.
-- **Frontend** — `frontend/`: a React bundle built to `entry.js`, consuming `@kubuno/sdk`, `@kubuno/ui` (`@ui`) and `@kubuno/drive` from npm — resolved by the host at runtime via the import map, never re-bundled.
+- **Server** — `server/`: Axum on the shared `kubuno-db` layer, running on **PostgreSQL, MySQL/MariaDB or SQLite** (the engine is an administrator choice read at run time — one binary, no rebuild), in a dedicated `media` schema; migrations in `server/migrations/`. Video transcoding (HLS) runs through FFmpeg. Proxied requests are authenticated from a signed `X-Kubuno-Auth` token minted by the core, never from plain forwarded headers.
+- **Web** — `web/`: a React bundle built to `entry.js`, consuming `@kubuno/sdk`, `@kubuno/ui` (`@ui`) and `@kubuno/drive` from npm — resolved by the host at runtime via the import map, never re-bundled.
+- **Mobile** — `mobile/`: reserved for the mobile apps (see `mobile/README.md`).
 
 ## Install
 
@@ -115,8 +116,8 @@ sudo systemctl restart kubuno            # the core loads the module on (re)star
 **Requirements:** Rust ≥ 1.82, Node.js ≥ 24, and a database: PostgreSQL 16, MySQL/MariaDB or SQLite.
 
 ```bash
-cargo build --release                      # → target/release/kubuno-media
-cd frontend && npm ci && npm run build      # → dist/{entry.js, entry.css}
+cd server && cargo build --release         # → server/target/release/kubuno-media
+cd web && npm ci && npm run build           # → web/dist/{entry.js, entry.css}
 bash build_kbpkg.sh                          # → dist/media-<version>-<os>-<arch>.kbpkg
 bash build_kbpkg.sh --install               # build, install into the module store and restart
 ```
