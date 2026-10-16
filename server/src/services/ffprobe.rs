@@ -68,7 +68,7 @@ fn parse_year(s: &str) -> Option<i32> {
 
 /// Merge format-level and stream-level tags into a case-insensitive map,
 /// then extract the fields we care about. Ogg/Opus put tags on the stream,
-/// MP3/FLAC/M4A on the format — we accept both.
+/// MP3/FLAC/M4A on the format - we accept both.
 fn extract_tags(data: &FfprobeOutput) -> MediaTags {
     let mut map: HashMap<String, String> = HashMap::new();
     // Stream tags first so format tags (usually authoritative) win on conflict.

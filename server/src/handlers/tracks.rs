@@ -69,7 +69,7 @@ struct RecentlyPlayedRow {
     played_at:     DateTime<Utc>,
 }
 
-/// GET /tracks/:id/lyrics — returns cached/embedded lyrics, or fetches them from
+/// GET /tracks/:id/lyrics - returns cached/embedded lyrics, or fetches them from
 /// free online providers (LRCLIB → lyrics.ovh → ChartLyrics) and caches the hit.
 pub async fn get_lyrics(
     State(state): State<AppState>,
@@ -235,7 +235,7 @@ pub async fn recently_played(
     // track's plays by recency with a window function and keeps rank 1. The
     // final `ORDER BY id` matches the original query, whose `DISTINCT ON
     // (t.id)` forced the output order to start with `t.id` (so this list is
-    // ordered by track id, not by play recency — preserved as-is).
+    // ordered by track id, not by play recency - preserved as-is).
     let rows = state
         .db
         .fetch_all_as::<RecentlyPlayedRow>(

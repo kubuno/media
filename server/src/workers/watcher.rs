@@ -13,14 +13,14 @@ use crate::state::AppState;
 use super::scan;
 
 /// How often the "manual scans only" mode still looks for a library that was
-/// added or removed. It restarts the cycle — and therefore re-scans — only when
+/// added or removed. It restarts the cycle - and therefore re-scans - only when
 /// the set of libraries actually changed, so an administrator who asked for no
 /// periodic re-scan gets none.
 const LIBRARY_CHANGE_POLL: Duration = Duration::from_secs(60);
 
 /// Lance le watcher filesystem pour toutes les bibliothèques actives.
 /// Le cycle redémarre (et re-scanne intégralement) à l'intervalle réglé par
-/// l'administrateur — `library_rescan_minutes`, relu à chaque tour.
+/// l'administrateur - `library_rescan_minutes`, relu à chaque tour.
 pub async fn start(state: AppState) {
     tokio::spawn(async move {
         loop {

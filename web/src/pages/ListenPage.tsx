@@ -498,7 +498,7 @@ function PlaylistsTab() {
 
   const handleRename = (p: Playlist) => { setEditTarget(p); setDialog('edit') }
   const handleDelete = async (p: Playlist) => {
-    // Project rule: never a browser dialog — the shared ConfirmDialog, like the
+    // Project rule: never a browser dialog - the shared ConfirmDialog, like the
     // radio and TV tabs of this same module.
     const ok = await confirm({
       title: 'Supprimer la playlist',
@@ -703,7 +703,7 @@ function AlbumDetailView({ albumId }: { albumId: string }) {
       disabled: albumLocked,
       onClick: () => {
         void mediaApi.refreshAlbumMeta(albumId).then(() => {
-          // Background enrichment — refresh views once it had time to land.
+          // Background enrichment - refresh views once it had time to land.
           setTimeout(refreshAlbumViews, 5000)
         }).catch(() => {})
       } },
@@ -821,7 +821,7 @@ function ArtistDetailView({ artistId }: { artistId: string }) {
       disabled: artistLocked,
       onClick: () => {
         void mediaApi.refreshArtistMeta(artistId).then(() => {
-          // Background enrichment — refresh views once it had time to land.
+          // Background enrichment - refresh views once it had time to land.
           setTimeout(refreshArtistViews, 5000)
         }).catch(() => {})
       } },

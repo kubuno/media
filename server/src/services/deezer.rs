@@ -1,4 +1,4 @@
-//! Free, key-less Deezer API — used to backfill artist photos (and album covers)
+//! Free, key-less Deezer API - used to backfill artist photos (and album covers)
 //! that aren't embedded in the local library.
 
 use reqwest::Client;

@@ -14,7 +14,7 @@ pub struct MovieNfo {
     pub mpaa:           Option<String>,
     pub tmdb_id:        Option<i32>,
     pub imdb_id:        Option<String>,
-    /// `<lockdata>true</lockdata>` — the item's metadata is
+    /// `<lockdata>true</lockdata>` - the item's metadata is
     /// authoritative and must not be refreshed from the internet.
     pub lockdata:       bool,
 }
@@ -57,7 +57,7 @@ fn tags(content: &str, name: &str) -> Vec<String> {
         .collect()
 }
 
-/// `<uniqueid type="tmdb">603</uniqueid>` — the standard provider ID element.
+/// `<uniqueid type="tmdb">603</uniqueid>` - the standard provider ID element.
 fn uniqueid(content: &str, provider: &str) -> Option<String> {
     let re = regex::Regex::new(&format!(
         r#"(?is)<uniqueid[^>]*type\s*=\s*"{provider}"[^>]*>\s*(.*?)\s*</uniqueid>"#

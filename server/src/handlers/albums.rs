@@ -185,7 +185,7 @@ pub async fn get_album(
     })))
 }
 
-/// GET /albums/:id/cover — serve the locally-cached album artwork (folder
+/// GET /albums/:id/cover - serve the locally-cached album artwork (folder
 /// image or embedded art extracted at scan time).
 pub async fn get_album_cover(
     State(state): State<AppState>,

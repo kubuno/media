@@ -236,7 +236,7 @@ export default function MovieDetailPage() {
       disabled: locked,
       onClick: () => {
         void mediaApi.refreshMetadata(movie.id).then(() => {
-          // Background enrichment — refresh views once it had time to land.
+          // Background enrichment - refresh views once it had time to land.
           setTimeout(refreshMovieViews, 5000)
         }).catch(() => {})
       } },

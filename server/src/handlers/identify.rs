@@ -61,7 +61,7 @@ async fn ensure_unlocked(state: &AppState, table: &str, id: Uuid) -> Result<(), 
     match locked {
         None => Err(MediaError::NotFound(format!("Élément {id}"))),
         Some(true) => Err(MediaError::Conflict(
-            "Métadonnées verrouillées — déverrouillez l'élément d'abord".into(),
+            "Métadonnées verrouillées - déverrouillez l'élément d'abord".into(),
         )),
         Some(false) => Ok(()),
     }
@@ -73,7 +73,7 @@ pub struct LockBody {
 }
 
 async fn set_lock(state: &AppState, table: &str, id: Uuid, locked: bool) -> Result<Json<Value>, MediaError> {
-    // Audited: same — literal table names only, values bound. No RETURNING:
+    // Audited: same - literal table names only, values bound. No RETURNING:
     // existence is checked from the affected row count instead.
     let sql = format!("UPDATE media.{table} SET meta_locked = $2 WHERE id = $1");
     let affected = state.db.execute(&sql, params![id, locked]).await?;
@@ -121,7 +121,7 @@ pub async fn lock_album(
 
 // ── Movies ────────────────────────────────────────────────────────────────────
 
-/// GET /movies/:id/identify — TMDB candidates for a manual match.
+/// GET /movies/:id/identify - TMDB candidates for a manual match.
 pub async fn identify_movie_search(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -149,7 +149,7 @@ pub async fn identify_movie_search(
 
     // Providers: the official TMDB API when a key is set
     // (exhaustive, localized), else the keyless TMDB website search (popular
-    // titles only) — plus Wikipedia search for lesser-known films.
+    // titles only) - plus Wikipedia search for lesser-known films.
     let language = metadata::load_language(&state.db, &state.settings).await;
     let tmdb_api = metadata::load_tmdb_service(&state.db, &state.settings, &state.http, &language).await;
     let wikidata = WikidataService::new(state.http.clone(), language);
@@ -224,7 +224,7 @@ pub async fn identify_movie_search(
     Ok(Json(json!({ "query": query, "year": year, "candidates": candidates })))
 }
 
-/// POST /movies/:id/identify — apply a chosen TMDB candidate.
+/// POST /movies/:id/identify - apply a chosen TMDB candidate.
 pub async fn identify_movie_apply(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -251,7 +251,7 @@ pub async fn identify_movie_apply(
 
 // ── TV shows ──────────────────────────────────────────────────────────────────
 
-/// GET /shows/:id/identify — TVMaze candidates for a manual match.
+/// GET /shows/:id/identify - TVMaze candidates for a manual match.
 pub async fn identify_show_search(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -300,7 +300,7 @@ pub struct ShowApplyBody {
     pub tvmaze_id: i32,
 }
 
-/// POST /shows/:id/identify — apply a chosen TVMaze candidate (fetch by ID).
+/// POST /shows/:id/identify - apply a chosen TVMaze candidate (fetch by ID).
 pub async fn identify_show_apply(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -340,7 +340,7 @@ pub async fn identify_show_apply(
     Ok(Json(json!({ "ok": true })))
 }
 
-/// POST /shows/:id/refresh-meta — re-enrich (by stored tvmaze_id when present).
+/// POST /shows/:id/refresh-meta - re-enrich (by stored tvmaze_id when present).
 pub async fn refresh_show(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -372,7 +372,7 @@ pub async fn refresh_show(
 
 // ── Artists ───────────────────────────────────────────────────────────────────
 
-/// GET /artists/:id/identify — MusicBrainz artist candidates.
+/// GET /artists/:id/identify - MusicBrainz artist candidates.
 pub async fn identify_artist_search(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -392,7 +392,7 @@ pub async fn identify_artist_search(
         .await
         .map_err(|e| MediaError::Upstream(format!("MusicBrainz: {e}")))?;
     // Composite "featuring"-style names from path parsing ("Black M/Zaho")
-    // don't exist in MusicBrainz — retry with the first segment.
+    // don't exist in MusicBrainz - retry with the first segment.
     if results.is_empty() {
         if let Some(first) = query.split(['/', ',', ';']).next().map(str::trim) {
             if !first.is_empty() && first != query {
@@ -422,7 +422,7 @@ pub struct MbApplyBody {
     pub mbid: String,
 }
 
-/// POST /artists/:id/identify — apply a chosen MusicBrainz artist.
+/// POST /artists/:id/identify - apply a chosen MusicBrainz artist.
 pub async fn identify_artist_apply(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -503,7 +503,7 @@ pub struct AlbumIdentifyQuery {
     pub artist: Option<String>,
 }
 
-/// GET /albums/:id/identify — MusicBrainz release-group candidates.
+/// GET /albums/:id/identify - MusicBrainz release-group candidates.
 pub async fn identify_album_search(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -561,7 +561,7 @@ pub async fn identify_album_search(
     Ok(Json(json!({ "query": query, "artist": artist, "candidates": candidates })))
 }
 
-/// POST /albums/:id/identify — apply a chosen MusicBrainz release-group.
+/// POST /albums/:id/identify - apply a chosen MusicBrainz release-group.
 pub async fn identify_album_apply(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,

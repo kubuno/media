@@ -1,4 +1,4 @@
-// Singleton Web Audio API engine — connected to the playerStore audio element
+// Singleton Web Audio API engine - connected to the playerStore audio element
 
 const EQ_FREQUENCIES = [32, 64, 130, 270, 560, 1000, 2000, 4000, 8000, 16000] as const
 export type EqBands = typeof EQ_FREQUENCIES

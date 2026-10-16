@@ -33,7 +33,7 @@ function LivePlayer({ channel, onClose }: { channel: TvChannel; onClose: () => v
       if (v.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS (Safari): only the master URL can carry a ticket. The
         // sub-playlist/segment requests (rewritten through the module's proxy)
-        // still depend on the deprecated compatibility cookie — known limit.
+        // still depend on the deprecated compatibility cookie - known limit.
         const signed = await signedUrl(src, { purpose: 'stream' }).catch(() => src)
         if (cancelled) return
         v.src = signed
@@ -64,7 +64,7 @@ function LivePlayer({ channel, onClose }: { channel: TvChannel; onClose: () => v
       instance.on(Hls.Events.MANIFEST_PARSED, () => { v.play().catch(() => {}) })
       instance.on(Hls.Events.ERROR, (_e: unknown, data: { fatal?: boolean; type?: string }) => {
         if (data.fatal) {
-          setError('Flux indisponible — la chaîne est peut-être hors ligne.')
+          setError('Flux indisponible - la chaîne est peut-être hors ligne.')
           instance.destroy()
         }
       })
@@ -277,7 +277,7 @@ function DiscoverDialog({ onClose, onAdd }: {
           <Button type="submit">Rechercher</Button>
         </form>
         <p className="text-[11px] text-text-tertiary mb-2">
-          Catalogue communautaire iptv-org — flux publics diffusés par les chaînes elles-mêmes.
+          Catalogue communautaire iptv-org - flux publics diffusés par les chaînes elles-mêmes.
         </p>
         <div className="flex-1 overflow-y-auto -mx-1 px-1">
           {isFetching && <div className="flex items-center justify-center py-8 text-text-tertiary"><Loader2 className="animate-spin" size={20} /></div>}
@@ -448,7 +448,7 @@ export default function TVPage() {
         ) : channels.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
             <Tv size={36} className="mb-2 opacity-50" />
-            <p className="text-sm">Aucune chaîne — ajoutez la vôtre ou découvrez-en.</p>
+            <p className="text-sm">Aucune chaîne - ajoutez la vôtre ou découvrez-en.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">

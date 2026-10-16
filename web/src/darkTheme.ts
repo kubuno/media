@@ -15,7 +15,7 @@ export const DARK_PAGE = {
   '--color-border':         'rgba(255,255,255,0.10)',
   '--color-border-strong':  'rgba(255,255,255,0.20)',
   '--color-search-bg':      '#262930',
-  // Neutral charcoal + electric-blue accent — same identity as the DJ console
+  // Neutral charcoal + electric-blue accent - same identity as the DJ console
   // (media palette rule: no cyan, no violet, no pink).
   '--color-primary':        '#2f7dff',
   '--color-primary-hover':  '#1f66e8',

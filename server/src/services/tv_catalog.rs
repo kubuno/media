@@ -44,7 +44,7 @@ pub fn catalog() -> Vec<TvSeed> {
         // ── Culture / francophone ──
         c("arte-fr", "Arte (français)", "https://artesimulcast.akamaized.net/hls/live/2031003/artelive_fr/index.m3u8", "https://www.arte.tv/fr/", "https://upload.wikimedia.org/wikipedia/commons/e/e8/Arte_Logo_2017.svg", &["culture", "documentaire"], "France", "fr"),
 
-        // ── International — info ──
+        // ── International - info ──
         c("dw-en", "DW English", "https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8", "https://www.dw.com", "https://upload.wikimedia.org/wikipedia/commons/e/e9/Deutsche_Welle_symbol_2012.svg", &["info"], "Allemagne", "en"),
         c("dw-de", "DW Deutsch", "https://dwamdstream104.akamaized.net/hls/live/2015530/dwstream104/index.m3u8", "https://www.dw.com/de/", "https://upload.wikimedia.org/wikipedia/commons/e/e9/Deutsche_Welle_symbol_2012.svg", &["info"], "Allemagne", "de"),
         c("aljazeera-en", "Al Jazeera English", "https://live-hls-apps-aje-fa.getaj.net/AJE/index.m3u8", "https://www.aljazeera.com", "https://upload.wikimedia.org/wikipedia/commons/f/f7/Aljazeera_eng.svg", &["info"], "Qatar", "en"),
@@ -110,7 +110,7 @@ pub async fn seed(db: &kubuno_db::DbPool) {
 }
 
 // ── Discovery: iptv-org community catalogue ──────────────────────────────────
-// https://iptv-org.github.io/api/ — static JSON dumps of publicly available
+// https://iptv-org.github.io/api/ - static JSON dumps of publicly available
 // streams. The files are large (~10 MB), so we cache the joined result in
 // memory and refresh at most every 12 h.
 

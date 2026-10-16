@@ -1,4 +1,4 @@
-//! Web TV — live television channels (HLS), mirroring the web radio feature:
+//! Web TV - live television channels (HLS), mirroring the web radio feature:
 //! builtin curated channels + user channels + favorites + recents + discovery
 //! (iptv-org community catalogue) + an HLS proxy that rewrites manifests so
 //! playback works same-origin (no CORS / mixed-content issues).
@@ -105,7 +105,7 @@ pub async fn list_channels(
     // the portable containment test below. It has no "matches everything"
     // literal like `%`, so its optional filter binds its value twice under
     // two distinct placeholders (once for the `IS NULL` guard, once for
-    // actual use) — placeholders are never reused.
+    // actual use) - placeholders are never reused.
     let category_contains = state.db.backend().json_array_contains("categories", 4);
     let sql = format!(
         r#"SELECT id, name, homepage, logo, categories, country, language,
@@ -319,7 +319,7 @@ pub async fn record_play(
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    // `ON CONFLICT (...) DO UPDATE SET played_at = NOW()` — bind a Rust
+    // `ON CONFLICT (...) DO UPDATE SET played_at = NOW()` - bind a Rust
     // timestamp as the incoming value instead of relying on `NOW()`.
     let played_at = chrono::Utc::now();
     let clause = state.db.backend().upsert(
@@ -497,7 +497,7 @@ async fn proxy_fetch(state: &AppState, raw_url: &str) -> Result<Response, MediaE
         .into_response())
 }
 
-/// GET /tv/channels/:id/stream — entry point: proxy the channel's manifest.
+/// GET /tv/channels/:id/stream - entry point: proxy the channel's manifest.
 pub async fn stream(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -525,7 +525,7 @@ pub struct ProxyQuery {
     pub u: String,
 }
 
-/// GET /tv/proxy?u=… — proxy a manifest-referenced resource (sub-playlist,
+/// GET /tv/proxy?u=… - proxy a manifest-referenced resource (sub-playlist,
 /// segment, key). URLs only ever come from manifests we rewrote ourselves.
 pub async fn proxy(
     State(state): State<AppState>,

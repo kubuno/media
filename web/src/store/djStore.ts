@@ -396,7 +396,7 @@ function ensureSeparator(ctx: AudioContext): Promise<boolean> {
 // Runs on the whole decoded track in a Blob Web Worker (allowed by the CSP
 // `worker-src 'self' blob:`). Offline lets us use a larger FFT (4096), 75 %
 // overlap, a soft Wiener mask refined over time + frequency, and produce both
-// stems at once — clearly cleaner than the live worklet. The stems are encoded
+// stems at once - clearly cleaner than the live worklet. The stems are encoded
 // to WAV and played back by swapping the deck's <audio> source, so the whole
 // transport (jog / loops / cues / tempo) keeps working unchanged.
 export interface StemUrls { vocal: string; instrumental: string }
@@ -524,7 +524,7 @@ let _djCtx:    AudioContext | null = null
 let _djMaster: GainNode     | null = null
 let _masterOut: AudioNode   | null = null   // final node before destination
 
-// Master graphic equaliser — 10 bands (mockup frequencies).
+// Master graphic equaliser - 10 bands (mockup frequencies).
 export const EQ_FREQS = [32, 64, 130, 270, 560, 1000, 2000, 4000, 8000, 16000] as const
 let _eqBands:    BiquadFilterNode[] = []
 let _eqDeepBass: BiquadFilterNode | null = null   // DEEP BASS (extra low shelf)
@@ -600,28 +600,28 @@ class BeatFxRack {
 
   private build() {
     const ctx = this.ctx
-    // ECHO — feedback delay
+    // ECHO - feedback delay
     { const din = ctx.createGain(); const d = ctx.createDelay(2); d.delayTime.value = 0.4
       const fb = ctx.createGain(); fb.gain.value = 0.45; const out = ctx.createGain()
       din.connect(d); d.connect(fb); fb.connect(d); d.connect(out); this.echoDelay = d
       this.effects.echo = { in: din, out } }
-    // ROLL — short high-feedback stutter
+    // ROLL - short high-feedback stutter
     { const din = ctx.createGain(); const d = ctx.createDelay(2); d.delayTime.value = 0.2
       const fb = ctx.createGain(); fb.gain.value = 0.82; const out = ctx.createGain()
       din.connect(d); d.connect(fb); fb.connect(d); d.connect(out); this.rollDelay = d
       this.effects.roll = { in: din, out } }
-    // REVERB — convolution
+    // REVERB - convolution
     { const din = ctx.createGain(); const c = ctx.createConvolver(); c.buffer = makeImpulse(ctx, 2.4, 2.2)
       const out = ctx.createGain(); din.connect(c); c.connect(out)
       this.effects.reverb = { in: din, out } }
-    // FLANGER — modulated short delay
+    // FLANGER - modulated short delay
     { const din = ctx.createGain(); const d = ctx.createDelay(0.05); d.delayTime.value = 0.005
       const fb = ctx.createGain(); fb.gain.value = 0.5; const out = ctx.createGain()
       const lfo = ctx.createOscillator(); lfo.frequency.value = 0.4; const lg = ctx.createGain(); lg.gain.value = 0.003
       lfo.connect(lg); lg.connect(d.delayTime); try { lfo.start() } catch { /* started */ }
       din.connect(d); d.connect(fb); fb.connect(d); d.connect(out); din.connect(out)
       this.flangerLfo = lfo; this.effects.flanger = { in: din, out } }
-    // PHASER — cascaded modulated all-pass
+    // PHASER - cascaded modulated all-pass
     { const din = ctx.createGain(); const out = ctx.createGain(); let node: AudioNode = din
       const aps: BiquadFilterNode[] = []
       for (let i = 0; i < 4; i++) { const ap = ctx.createBiquadFilter(); ap.type = 'allpass'; ap.frequency.value = 400 + i * 300; node.connect(ap); node = ap; aps.push(ap) }
@@ -629,7 +629,7 @@ class BeatFxRack {
       const lfo = ctx.createOscillator(); lfo.frequency.value = 0.5; const lg = ctx.createGain(); lg.gain.value = 300
       lfo.connect(lg); aps.forEach(ap => lg.connect(ap.frequency)); try { lfo.start() } catch { /* started */ }
       this.phaserLfo = lfo; this.effects.phaser = { in: din, out } }
-    // FILTER — resonant low-pass send
+    // FILTER - resonant low-pass send
     { const din = ctx.createGain(); const bq = ctx.createBiquadFilter(); bq.type = 'lowpass'; bq.frequency.value = 1100; bq.Q.value = 7
       const out = ctx.createGain(); din.connect(bq); bq.connect(out)
       this.effects.filter = { in: din, out } }
@@ -1182,7 +1182,7 @@ function setCueDeck(deck: DeckId, on: boolean) { const g = _cueDeckGain[deck]; i
 function setCueMixGain(v: number) { if (_cueMasterGain) _cueMasterGain.gain.value = Math.max(0, Math.min(1, v)) }
 async function setHeadphoneDevice(id: string) {
   // Move the WHOLE console output to the chosen device (AudioContext.setSinkId,
-  // Chrome 110+) — the old code only moved the cue/PFL element, which is silent
+  // Chrome 110+) - the old code only moved the cue/PFL element, which is silent
   // unless a deck is cued, so the selector appeared to have no effect.
   const ctx = _djCtx as (AudioContext & { setSinkId?: (id: string | { type: 'none' }) => Promise<void> }) | null
   if (ctx?.setSinkId) {
@@ -2349,9 +2349,9 @@ export const useDJStore = create<DJStoreState>((set, get) => {
     exportSetlist() {
       const h = get().history
       if (h.length === 0) return
-      const lines = h.map((e, i) => `${i + 1}. ${e.artist ? e.artist + ' — ' : ''}${e.title}` +
+      const lines = h.map((e, i) => `${i + 1}. ${e.artist ? e.artist + ' - ' : ''}${e.title}` +
         `${e.key ? `  [${e.key}]` : ''}${e.bpm ? `  ${e.bpm.toFixed(1)} BPM` : ''}  (Deck ${e.deck})`)
-      const text = `Kubuno DJ — Setlist (${h.length} titres)\n\n${lines.join('\n')}\n`
+      const text = `Kubuno DJ - Setlist (${h.length} titres)\n\n${lines.join('\n')}\n`
       const blob = new Blob([text], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = 'kubuno-setlist.txt'

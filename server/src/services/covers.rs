@@ -3,7 +3,7 @@
 //! beats remote providers (Cover Art Archive, Deezer).
 //!
 //! Extracted/copied covers are cached as `<cache_path>/covers/<album_id>.jpg`
-//! and served by `GET /albums/:id/cover` — `cover_path` then stores the
+//! and served by `GET /albums/:id/cover` - `cover_path` then stores the
 //! module-relative API path (`/api/v1/media/albums/<id>/cover`).
 
 use std::path::{Path, PathBuf};

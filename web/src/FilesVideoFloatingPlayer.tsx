@@ -432,7 +432,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
               className="max-w-full max-h-full pointer-events-none"
             />
 
-            {/* Controls overlay — auto-hides after 3 s of inactivity */}
+            {/* Controls overlay - auto-hides after 3 s of inactivity */}
             <div
               className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40
                           to-transparent px-3 pt-8 pb-3 transition-opacity duration-300
@@ -567,7 +567,7 @@ export default function FilesVideoFloatingPlayer({ file, onClose, srcOverride, i
         </div>
       </FloatingWindow>
 
-      {/* Mini player pill — shown while window is hidden */}
+      {/* Mini player pill - shown while window is hidden */}
       {isMinimized && (
         <MiniPlayer
           file={file}

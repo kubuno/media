@@ -1,4 +1,4 @@
-/** Media MODULE bundle — loaded at runtime (see vite.module.config). */
+/** Media MODULE bundle - loaded at runtime (see vite.module.config). */
 import { lazy } from 'react'
 import { RouteRegistry, WaffleAppRegistry, FaviconRegistry, SlotRegistry, ModuleSettingsRegistry, useSidebarStore, useToolbarStore, useSearchStore, SDK_VERSION } from '@kubuno/sdk'
 import { registerMediaAdmin } from './admin/MediaAdminPanel'

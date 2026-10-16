@@ -1,4 +1,4 @@
-//! TheAudioDB — artist images and localized biographies, looked up by
+//! TheAudioDB - artist images and localized biographies, looked up by
 //! MusicBrainz ID.
 //! Uses the public test API key, which allows MBID lookups.
 

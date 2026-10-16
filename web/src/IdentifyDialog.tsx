@@ -198,7 +198,7 @@ function IdentifyDialogInner({ target }: { target: IdentifyTarget }) {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-text-primary flex items-center gap-2">
             <Icon className="w-4 h-4 text-primary" />
-            {t('media_identify_title')} — {target.name}
+            {t('media_identify_title')} - {target.name}
           </h3>
           <button
             onClick={close}

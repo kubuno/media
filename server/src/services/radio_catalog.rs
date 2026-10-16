@@ -30,7 +30,7 @@ const fn r(
 
 pub fn catalog() -> Vec<RadioSeed> {
     vec![
-        // ── France — Radio France (service public) ──
+        // ── France - Radio France (service public) ──
         r("franceinter", "France Inter", "https://icecast.radiofrance.fr/franceinter-midfi.mp3", "https://www.radiofrance.fr/franceinter", &["généraliste", "talk", "actualité"], "France", "fr", "MP3", 128),
         r("franceinfo", "franceinfo", "https://icecast.radiofrance.fr/franceinfo-midfi.mp3", "https://www.radiofrance.fr/franceinfo", &["actualité", "talk", "info"], "France", "fr", "MP3", 128),
         r("franceculture", "France Culture", "https://icecast.radiofrance.fr/franceculture-midfi.mp3", "https://www.radiofrance.fr/franceculture", &["culture", "talk"], "France", "fr", "MP3", 128),
@@ -48,18 +48,18 @@ pub fn catalog() -> Vec<RadioSeed> {
         r("mouv", "Mouv'", "https://icecast.radiofrance.fr/mouv-midfi.mp3", "https://www.radiofrance.fr/mouv", &["hip-hop", "rap", "jeune"], "France", "fr", "MP3", 128),
         r("mouvrap", "Mouv' Rap US", "https://icecast.radiofrance.fr/mouvrapus-midfi.mp3", "https://www.radiofrance.fr/mouv", &["rap", "hip-hop"], "France", "fr", "MP3", 128),
 
-        // ── France — NRJ Group ──
+        // ── France - NRJ Group ──
         r("nrj", "NRJ", "https://cdn.nrjaudio.fm/audio1/fr/30001/mp3_128.mp3", "https://www.nrj.fr", &["pop", "hits", "dance"], "France", "fr", "MP3", 128),
         r("cheriefm", "Chérie FM", "https://cdn.nrjaudio.fm/audio1/fr/30201/mp3_128.mp3", "https://www.cheriefm.fr", &["pop", "love songs"], "France", "fr", "MP3", 128),
         r("nostalgie", "Nostalgie", "https://cdn.nrjaudio.fm/audio1/fr/30601/mp3_128.mp3", "https://www.nostalgie.fr", &["oldies", "années 80"], "France", "fr", "MP3", 128),
         r("rireetchansons", "Rire & Chansons", "https://cdn.nrjaudio.fm/audio1/fr/30401/mp3_128.mp3", "https://www.rireetchansons.fr", &["humour", "comédie"], "France", "fr", "MP3", 128),
 
-        // ── France — RTL Group ──
+        // ── France - RTL Group ──
         r("rtl", "RTL", "https://streaming.radio.rtl.fr/rtl-1-44-128", "https://www.rtl.fr", &["généraliste", "talk"], "France", "fr", "MP3", 128),
         r("rtl2", "RTL2", "https://streaming.radio.rtl.fr/rtl2-1-44-128", "https://www.rtl2.fr", &["pop rock"], "France", "fr", "MP3", 128),
         r("funradio", "Fun Radio", "https://streaming.radio.rtl.fr/fun-radio-1-44-128", "https://www.funradio.fr", &["dance", "électro"], "France", "fr", "MP3", 128),
 
-        // ── France — Indépendantes ──
+        // ── France - Indépendantes ──
         r("europe1", "Europe 1", "https://europe1.lmn.fm/europe1.mp3", "https://www.europe1.fr", &["généraliste", "talk"], "France", "fr", "MP3", 128),
         r("rmc", "RMC", "https://audio.bfmtv.com/rmcradio_128.mp3", "https://rmc.bfmtv.com", &["talk", "sport", "actualité"], "France", "fr", "MP3", 128),
         r("skyrock", "Skyrock", "http://icecast.skyrock.net/s/natio_mp3_128k", "https://www.skyrock.fm", &["rap", "hip-hop"], "France", "fr", "MP3", 128),
@@ -154,7 +154,7 @@ pub fn catalog() -> Vec<RadioSeed> {
         r("optionmusique", "Option Musique (RTS)", "http://stream.srg-ssr.ch/m/option-musique/mp3_128", "https://www.rts.ch", &["variété", "chanson"], "Suisse", "fr", "MP3", 128),
         r("icipremiere", "ICI Première (Radio-Canada)", "https://rcavliveaudio.akamaized.net/hls/live/2006635/P-2QMTL0_MTL/master.m3u8", "https://ici.radio-canada.ca", &["généraliste", "talk"], "Canada", "fr", "AAC", 96),
 
-        // ── International — divers pays ──
+        // ── International - divers pays ──
         r("rne-clasica", "Radio Clásica (RNE)", "https://crtvg.rtve.es/recursos/radio/radioclasica.mp3", "https://www.rtve.es", &["classique"], "Espagne", "es", "MP3", 128),
         r("rai-radio1", "Rai Radio 1", "https://icestreaming.rai.it/1.mp3", "https://www.raiplaysound.it", &["généraliste", "talk"], "Italie", "it", "MP3", 128),
         r("rai-radio2", "Rai Radio 2", "https://icestreaming.rai.it/2.mp3", "https://www.raiplaysound.it", &["pop", "variété"], "Italie", "it", "MP3", 128),
@@ -181,7 +181,7 @@ pub async fn seed(db: &kubuno_db::DbPool) {
     let items = catalog();
     let count = items.len();
     // Runtime query (never a macro: the module runs on three engines). `tags`
-    // is a JSON column now; `favicon` stays a literal NULL — it is neither set
+    // is a JSON column now; `favicon` stays a literal NULL - it is neither set
     // on insert nor touched by the upsert (unchanged behaviour from before).
     let clause = db.backend().upsert(
         "media.radio_stations",

@@ -35,7 +35,7 @@ pub async fn fetch(
     }
     let c = client()?;
 
-    // 1) LRCLIB exact match (best — gives synced lyrics).
+    // 1) LRCLIB exact match (best - gives synced lyrics).
     if let Some(l) = lrclib_get(&c, artist, title, album, duration).await {
         return Some(l);
     }

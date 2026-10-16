@@ -244,7 +244,7 @@ pub async fn apply_omdb_ratings(
     tracing::info!(%id, kind, "Notes OMDb (RT/IMDb/Metacritic) appliquées");
 }
 
-/// Build the official TMDB API service when a key is configured — the
+/// Build the official TMDB API service when a key is configured - the
 /// primary movie/show provider. The DB setting
 /// `tmdb_api_key` overrides the config file.
 pub async fn load_tmdb_service(
@@ -278,7 +278,7 @@ pub async fn load_tmdb_service(
 }
 
 /// Starts the metadata enrichment workers in the background.
-/// Failed items are retried up to 3 times (with a 1h cool-down) — see the
+/// Failed items are retried up to 3 times (with a 1h cool-down) - see the
 /// `retryable` predicate in each poller.
 pub async fn start(db: DbPool, settings: Arc<Settings>) {
     let db_movies = db.clone();
@@ -564,7 +564,7 @@ pub async fn enrich_movie_api(
 
 /// Enrich a movie from Wikidata/Wikipedia (localized text, crew, rating)
 /// merged with the keyless TMDB search (id, posters, backdrop, votes).
-/// Either provider alone is enough — we only fail when both come up empty.
+/// Either provider alone is enough - we only fail when both come up empty.
 #[allow(clippy::too_many_arguments)]
 async fn enrich_movie(
     db:          &DbPool,
@@ -960,7 +960,7 @@ pub async fn enrich_show_tvmaze(
     // (`SELECT COUNT(*) ... WHERE season_id = media.tv_seasons.id`), which
     // does not translate to MySQL's `ON DUPLICATE KEY UPDATE` (the bare
     // column name inside the subquery would resolve to `tv_episodes.id`
-    // instead of the outer row) — the count is read in Rust and bound as a
+    // instead of the outer row) - the count is read in Rust and bound as a
     // plain incoming value instead.
     for sm in &seasons_meta {
         let season_air_date: Option<chrono::NaiveDate> = sm.premiere_date
@@ -1207,7 +1207,7 @@ async fn overlay_show_tmdb(
     )
     .await?;
 
-    // tmdb_id is UNIQUE — best-effort separate statement.
+    // tmdb_id is UNIQUE - best-effort separate statement.
     let _ = db.execute(
         "UPDATE media.tv_shows SET tmdb_id = $1 WHERE id = $2 AND NOT EXISTS (SELECT 1 FROM media.tv_shows WHERE tmdb_id = $3 AND id <> $4)",
         params![show.id, show_id, show.id, show_id],
@@ -1230,7 +1230,7 @@ async fn enrich_show_wikidata(
         .ok_or_else(|| anyhow::anyhow!("Aucun résultat Wikidata/Wikipedia pour la série '{name}'"))?;
 
     // Prefer a high-quality TMDB poster over the Wikipedia one (confident match
-    // against the canonical Wikidata title only — otherwise keep Wikipedia's).
+    // against the canonical Wikidata title only - otherwise keep Wikipedia's).
     let match_name = result.title.as_deref().unwrap_or(name);
     let cands = tmdb::search_keyless(client, match_name, "tv").await;
     let candidate = tmdb::best_match(&cands, match_name, result.first_air_year).cloned();
@@ -1498,7 +1498,7 @@ pub async fn enrich_album_mb(
         }
     };
 
-    // Cover Art Archive front cover (404 is common — best-effort).
+    // Cover Art Archive front cover (404 is common - best-effort).
     let cover = mb.release_group_cover(&rg.id).await.unwrap_or_default();
 
     let release_year = rg.first_release_year();

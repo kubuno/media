@@ -163,7 +163,7 @@ if (_snap?.track) {
 }
 
 /** If autoplay is blocked (no user gesture after reload), resume on the first
- *  user interaction anywhere on the page — a one-shot, self-removing listener. */
+ *  user interaction anywhere on the page - a one-shot, self-removing listener. */
 function armResumeOnGesture() {
   const resume = () => {
     activeEl.play().catch(() => {})
@@ -219,7 +219,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     _persist()
   }
 
-  /** Generic crossfade to an explicit track — used for BOTH automatic
+  /** Generic crossfade to an explicit track - used for BOTH automatic
    *  end-of-track transitions and manual switches (next/prev/track click).
    *  Time-based ramp (performance.now) so it works mid-track, not just near the end.
    *  Chains cleanly when called mid-fade (rapid browsing): the audible incoming
@@ -288,7 +288,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     crossfadeTo(q[nextIndex], q, nextIndex, fadeSecs)
   }
 
-  // Abrupt load (no fade) — used when nothing is playing, crossfade is off, or the
+  // Abrupt load (no fade) - used when nothing is playing, crossfade is off, or the
   // previous track already ended (auto-advance) so there's no audio to blend.
   const loadAndPlay = (track: PlayerTrack, queue: PlayerTrack[], index: number) => {
     cancelCrossfade()
@@ -422,7 +422,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
     playTrack(track, queue = [track], index = 0) {
       const st = get()
-      // Smooth (crossfade) whenever a different audio is already playing — works
+      // Smooth (crossfade) whenever a different audio is already playing - works
       // for music↔music, music↔radio and radio↔radio (volume blend between the
       // two elements; no seeking involved, so live radio is fine). Falls back to
       // an instant load only when nothing is playing or crossfade is disabled.

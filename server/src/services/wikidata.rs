@@ -131,7 +131,7 @@ impl WikidataService {
             }
         }
 
-        // Step 3: Wikidata SPARQL fallback — poster from P18 property
+        // Step 3: Wikidata SPARQL fallback - poster from P18 property
         self.wikidata_sparql_movie(title, year).await
     }
 
@@ -422,7 +422,7 @@ impl WikidataService {
             .await?;
 
         // SPARQL can return the same label several times (one row per binding
-        // combination) — deduplicate case-insensitively.
+        // combination) - deduplicate case-insensitively.
         let mut genres: Vec<String> = Vec::new();
         for b in &resp.results.bindings {
             if let Some(g) = b.get("genreLabel")

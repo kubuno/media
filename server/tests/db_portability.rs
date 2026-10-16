@@ -1,6 +1,6 @@
 //! Runs the media module's own migrations and the query shapes its services
 //! issue against a real server of **each** engine, from a single compiled
-//! binary — the proof that the engine is a run-time choice, not a build-time
+//! binary - the proof that the engine is a run-time choice, not a build-time
 //! one, and that the pieces the port changed (JSON array columns, the
 //! floating-point rating columns, the portable upsert and count) behave
 //! identically on all of them.

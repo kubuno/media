@@ -8,8 +8,8 @@
 //! time, so no migration and no re-enrichment is needed for the setting to work
 //! on an existing library.
 //!
-//! Only MOVIES carry `content_rating` in this module's schema — TV shows and
-//! episodes have no such column — so a series is always "unrated" and is
+//! Only MOVIES carry `content_rating` in this module's schema - TV shows and
+//! episodes have no such column - so a series is always "unrated" and is
 //! governed by `block_unrated_content` alone.
 
 use std::collections::HashMap;
@@ -36,9 +36,9 @@ pub fn min_age_for(rating: &str) -> Option<u8> {
     let tail = norm.rsplit(':').next().unwrap_or("").to_string();
     let norm = if tail.is_empty() { norm } else { tail };
 
-    // Named certifications first — they are unambiguous.
+    // Named certifications first - they are unambiguous.
     match norm.as_str() {
-        // United States — theatrical (MPA)
+        // United States - theatrical (MPA)
         "G" | "TV-G" | "TV-Y" | "TOUSPUBLICS" | "TOUTPUBLIC" | "U" | "UNIVERSAL" => return Some(0),
         "TV-Y7" | "TV-Y7-FV" => return Some(7),
         "PG" | "TV-PG" => return Some(8),
@@ -71,9 +71,9 @@ pub fn min_age_for(rating: &str) -> Option<u8> {
 
 /// Whether an item may be played / listed for a NON-ADMIN user.
 ///
-/// * `max_age == 0` — the restriction is disabled, everything passes.
-/// * unknown or missing certification — governed by `block_unrated`.
-/// * otherwise — the certification's minimum age must not exceed the ceiling.
+/// * `max_age == 0` - the restriction is disabled, everything passes.
+/// * unknown or missing certification - governed by `block_unrated`.
+/// * otherwise - the certification's minimum age must not exceed the ceiling.
 pub fn is_allowed(rating: Option<&str>, max_age: u8, block_unrated: bool) -> bool {
     if max_age == 0 {
         return true;
@@ -87,7 +87,7 @@ pub fn is_allowed(rating: Option<&str>, max_age: u8, block_unrated: bool) -> boo
 /// Certifications of the given movies, in one runtime query (never a macro: the
 /// module ships a `.sqlx` offline cache that new macros would invalidate).
 ///
-/// Ids that are not movies — TV episodes, for instance — are simply absent from
+/// Ids that are not movies - TV episodes, for instance - are simply absent from
 /// the map, which the caller reads as "unrated".
 pub async fn ratings_for(
     db: &kubuno_db::DbPool,
@@ -96,7 +96,7 @@ pub async fn ratings_for(
     if ids.is_empty() {
         return HashMap::new();
     }
-    // Portable `id IN (...)` — no PostgreSQL `= ANY(array)`.
+    // Portable `id IN (...)` - no PostgreSQL `= ANY(array)`.
     let list = db.backend().in_list(1, ids.len());
     let sql = format!("SELECT id, content_rating FROM media.movies WHERE id IN ({list})");
     let binds: Vec<kubuno_db::DbValue> = ids.iter().map(|id| (*id).into()).collect();

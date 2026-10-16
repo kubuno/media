@@ -25,7 +25,7 @@ use crate::{
 /// Filtering happens in RUST, on rows already deserialised, because the list
 /// queries must stay portable across the three engines and must not gain a
 /// per-engine WHERE clause. Two consequences, accepted knowingly:
-///   * a paginated page can come back SHORTER than its limit — the client shows
+///   * a paginated page can come back SHORTER than its limit - the client shows
 ///     fewer cards, it never shows a forbidden one;
 ///   * this is a display filter only. The HARD gate is in `handlers::stream`,
 ///     which is what actually refuses to serve the bytes.
@@ -405,7 +405,7 @@ async fn ensure_movie_unlocked(state: &AppState, id: Uuid) -> Result<(), MediaEr
     match locked {
         None => Err(MediaError::NotFound(format!("Film {id}"))),
         Some(true) => Err(MediaError::Conflict(
-            "Métadonnées verrouillées — déverrouillez le film d'abord".into(),
+            "Métadonnées verrouillées - déverrouillez le film d'abord".into(),
         )),
         Some(false) => Ok(()),
     }

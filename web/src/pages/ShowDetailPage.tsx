@@ -58,7 +58,7 @@ function EpisodeRow({ ep, showName, seasonNumber }: {
   const mins = ep.duration_secs ? Math.round(ep.duration_secs / 60) : null
 
   const play = () => {
-    const label = `${showName} — S${String(seasonNumber).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}${ep.name ? ` · ${ep.name}` : ''}`
+    const label = `${showName} - S${String(seasonNumber).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}${ep.name ? ` · ${ep.name}` : ''}`
     openPlayer(ep.id, label)
   }
 
@@ -161,7 +161,7 @@ export default function ShowDetailPage() {
   const playFirst = () => {
     if (episodes.length > 0 && activeSeason != null) {
       const ep = episodes[0]
-      openPlayer(ep.id, `${show.name} — S${String(activeSeason).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`)
+      openPlayer(ep.id, `${show.name} - S${String(activeSeason).padStart(2, '0')}E${String(ep.episode_number).padStart(2, '0')}`)
     }
   }
 

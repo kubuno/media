@@ -291,8 +291,8 @@ pub fn normalize_title(s: &str) -> String {
         .collect()
 }
 
-/// Query the public TMDB website search JSON (`/search/trending`) — no API
-/// key required — and return rich candidates of the requested `media_type`
+/// Query the public TMDB website search JSON (`/search/trending`) - no API
+/// key required - and return rich candidates of the requested `media_type`
 /// ("movie" or "tv"). Returns an empty vec on any network/parse error.
 pub async fn search_keyless(
     client:     &Client,
@@ -374,7 +374,7 @@ pub async fn search_keyless(
 
 /// Pick the candidate that **confidently** matches the wanted title:
 /// exact normalized title (main or original), with a year match preferred.
-/// Returns None when nothing matches confidently — the caller keeps what it has.
+/// Returns None when nothing matches confidently - the caller keeps what it has.
 pub fn best_match<'a>(
     candidates: &'a [TmdbCandidate],
     title:      &str,

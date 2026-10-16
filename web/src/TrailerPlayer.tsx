@@ -22,7 +22,7 @@ export default function TrailerPlayer() {
 
   if (!isOpen) return null
 
-  const windowTitle = `${title}${year ? ` (${year})` : ''} — ${t('media_trailer_title')}`
+  const windowTitle = `${title}${year ? ` (${year})` : ''} - ${t('media_trailer_title')}`
   const key = trailerKey ?? searched?.video_id ?? null
 
   return (

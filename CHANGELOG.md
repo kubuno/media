@@ -52,10 +52,10 @@ number at release time, and CI publishes that section as the GitHub Release note
   pulled in an RSA implementation vulnerable to a timing side-channel
   (RUSTSEC-2023-0071) for which no fix will ever exist. The new line does not
   depend on it at all, and it refuses any SQL string built at run time unless it
-  has been audited — the queries here were checked and marked.
+  has been audited - the queries here were checked and marked.
 - **Input validation library updated.** The version in use carried
   RUSTSEC-2024-0421 through its domain-name parser, which accepted Punycode
-  labels that decode to plain ASCII — a mismatch an attacker can use to make two
+  labels that decode to plain ASCII - a mismatch an attacker can use to make two
   different names look like one.
 
 ### Fixed
@@ -89,20 +89,20 @@ number at release time, and CI publishes that section as the GitHub Release note
 - **This module now installs as a Kubuno package (`.kbpkg`) only.** Its system
   packages (Debian/RPM and the Windows and macOS installers) are no longer
   built: the module is distributed as one `.kbpkg` per platform (Linux, Windows,
-  macOS) that the Kubuno server installs itself — from the admin console, or
+  macOS) that the Kubuno server installs itself - from the admin console, or
   offline with `kubuno modules:install <file>.kbpkg`.
 - **The README now opens with a logo, and the Listen section carries its own.**
   The Listen heading shows the Listen artwork used by the applications menu and
   the browser tab. Media itself has no module artwork yet, so the page opens on
   the Kubuno crest as a stand-in.
 
-- **New Listen logo** — a green hexagon with a white loudspeaker, used as the
+- **New Listen logo** - a green hexagon with a white loudspeaker, used as the
   browser-tab icon of `/media/listen` and in the applications menu. It
   replaces the generic music-note icon and is raster (PNG) designer artwork.
 
 - **Classic window glyphs on the floating video player, music player and TV.**
   Expand is a plain square, reduce two overlapping squares, and fullscreen the
-  corner icons — no more diagonal double arrows.
+  corner icons - no more diagonal double arrows.
 
 
 
@@ -110,7 +110,7 @@ number at release time, and CI publishes that section as the GitHub Release note
 ### Fixed
 
 - **The floating players' title bar no longer balloons on a narrow window.**
-  A long track or file name — "Parle-moi (feat. Zaho)" — used to wrap onto four
+  A long track or file name - "Parle-moi (feat. Zaho)" - used to wrap onto four
   lines and turn the accent band into a block three times its height, because
   the band's six action buttons leave the title only a few dozen pixels at the
   minimum window width. The title now stays on a single line and gives way as
@@ -125,11 +125,11 @@ number at release time, and CI publishes that section as the GitHub Release note
   release; the lockfile now takes the version that replaced it.
 - **The package could not be built where `zip` is absent.** The Windows job of
   the continuous integration has no `zip`, so the Windows package was simply lost
-  the first time it was attempted — a script failure, not a build failure. The
+  the first time it was attempted - a script failure, not a build failure. The
   builder now falls back to 7-Zip, then to PowerShell.
 ### Added
 
-- **This module now ships a `.kbpkg`** — the single package format a Kubuno
+- **This module now ships a `.kbpkg`** - the single package format a Kubuno
   server installs by itself, the same file on Linux, Windows and macOS. It
   carries the same binary, interface and manifest as the system packages,
   arranged the way the server expects to find a module on disk, plus a
@@ -143,7 +143,7 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 - **A built package could be thrown away instead of published.** The job that
   attaches a package to the release waited ten minutes for another workflow to
-  create that release, then gave up with "release never appeared — build.yml
+  create that release, then gave up with "release never appeared - build.yml
   likely failed". The diagnosis was wrong: on a repository whose `.deb` takes
   longer than ten minutes to build, the release simply did not exist yet, and a
   package that had built perfectly was discarded. Four modules reached v0.1.6
@@ -161,7 +161,7 @@ number at release time, and CI publishes that section as the GitHub Release note
 - **Media now authenticates proxied requests from a signed token instead of
   trusting plain headers.** Requests must carry a valid `X-Kubuno-Auth` token
   minted by the core with this module's internal secret (see `kubuno-modauth`),
-  rather than reading `X-Kubuno-User-*` headers at face value — which any process
+  rather than reading `X-Kubuno-User-*` headers at face value - which any process
   reaching Media's loopback port could otherwise forge to act as any user.
 
 ## [0.1.6] - 2026-08-19
@@ -170,14 +170,14 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 - **Pill-shaped buttons are gone from the interface.** Filter chips, view
   segments, tab selectors and action buttons that were drawn as pills now use the
-  same 4 px corner radius as every other button — the shape set them apart for no
+  same 4 px corner radius as every other button - the shape set them apart for no
   reason other than habit. Round buttons that hold a lone icon, avatars, status
   dots and non-clickable badges keep their shape: a circle around a single glyph
   is not a pill.
 
 - Theme tokens: two colours for navigation labels (`--color-text-nav`,
   `--color-text-nav-active`). Every module carries the same token sheet, so the
-  values must match across them — whichever bundle loads last would otherwise
+  values must match across them - whichever bundle loads last would otherwise
   win. No visible change inside this module.
 
 ### Changed

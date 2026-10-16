@@ -23,7 +23,7 @@ use crate::{
 /// file may leave the server, and the only one that matters: the list filters
 /// elsewhere are cosmetic, a guessed id would defeat them.
 ///
-/// Administrators are never restricted — they must be able to check what they
+/// Administrators are never restricted - they must be able to check what they
 /// configured. The certification is read with a dedicated runtime query, which
 /// yields nothing for a TV episode, correctly treating it as unrated.
 async fn ensure_playable(
@@ -71,7 +71,7 @@ async fn video_file_path(db: &kubuno_db::DbPool, id: Uuid) -> Result<Option<Stri
         return Ok(movie);
     }
     // `tv_episodes.file_path` is nullable, so the scalar itself is an `Option<String>`
-    // and the row lookup wraps it a second time — flatten "no row" and "row with a
+    // and the row lookup wraps it a second time - flatten "no row" and "row with a
     // NULL path" into the same `None`.
     let episode: Option<Option<String>> = db
         .fetch_optional_scalar::<Option<String>>(
@@ -146,7 +146,7 @@ pub async fn hls_segment(
     serve_file(&seg_path, "video/mp2t").await
 }
 
-/// Stream direct sans transcription — supporte les Range requests pour la navigation.
+/// Stream direct sans transcription - supporte les Range requests pour la navigation.
 pub async fn direct_stream(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -162,7 +162,7 @@ pub async fn direct_stream(
     serve_ranged(std::path::Path::new(&path), "video/mp4", range.as_deref()).await
 }
 
-/// Stream audio — supporte les Range requests pour la navigation.
+/// Stream audio - supporte les Range requests pour la navigation.
 pub async fn audio_stream(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -239,7 +239,7 @@ async fn serve_ranged(
         }
     }
 
-    // Full-file response — advertise range support so the browser knows it can seek.
+    // Full-file response - advertise range support so the browser knows it can seek.
     let stream = ReaderStream::new(file);
     let body   = Body::from_stream(stream);
 

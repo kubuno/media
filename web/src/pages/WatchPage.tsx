@@ -203,7 +203,7 @@ function MoviesTab() {
     )
   }
 
-  // The home tab carries the "recently added" rows — this tab is the full grid.
+  // The home tab carries the "recently added" rows - this tab is the full grid.
   void recent
 
   return (

@@ -75,7 +75,7 @@ pub struct MetadataSettings {
     pub tmdb_base_url:      String,
     #[serde(default = "default_tmdb_image_base")]
     pub tmdb_image_base:    String,
-    /// OMDb API key — relays Rotten Tomatoes / IMDb / Metacritic ratings
+    /// OMDb API key - relays Rotten Tomatoes / IMDb / Metacritic ratings
     /// (free at omdbapi.com). Can be overridden by the `omdb_api_key` DB setting.
     #[serde(default)]
     pub omdb_api_key:       String,

@@ -1,4 +1,4 @@
-//! OMDb (omdbapi.com) — relays Rotten
+//! OMDb (omdbapi.com) - relays Rotten
 //! Tomatoes, IMDb and Metacritic ratings. Rotten Tomatoes itself has no
 //! public API; OMDb relays its Tomatometer legally with a free key.
 //!
@@ -17,7 +17,7 @@ struct OmdbResponse {
     metascore: Option<String>,
     #[serde(rename = "Ratings")]
     ratings: Option<Vec<OmdbRating>>,
-    /// IMDb poster (Amazon-hosted) — an extra artwork source.
+    /// IMDb poster (Amazon-hosted) - an extra artwork source.
     #[serde(rename = "Poster")]
     poster: Option<String>,
 }
@@ -36,7 +36,7 @@ pub struct Ratings {
     pub imdb:            Option<String>, // "8.8"
     pub rotten_tomatoes: Option<String>, // "87%"
     pub metacritic:      Option<String>, // "74/100"
-    /// IMDb poster URL — added to the item's poster candidates.
+    /// IMDb poster URL - added to the item's poster candidates.
     pub poster:          Option<String>,
 }
 
@@ -67,7 +67,7 @@ fn clean(v: Option<String>) -> Option<String> {
 }
 
 /// Fetch ratings from OMDb. `kind` is "movie" or "series". Returns None on
-/// any miss/error — ratings are always best-effort.
+/// any miss/error - ratings are always best-effort.
 pub async fn fetch_ratings(
     client:  &Client,
     api_key: &str,

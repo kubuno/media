@@ -182,7 +182,7 @@ export function VisualizerPanel() {
       className="flex flex-col h-full select-none"
       style={{ width: 280, background: 'radial-gradient(120% 80% at 50% 0%, #20222a 0%, #0d0e11 70%)' }}
     >
-      {/* Mode selector — segmented pills */}
+      {/* Mode selector - segmented pills */}
       <div className="grid grid-cols-2 gap-1 p-2">
         {THEMES.map(t => (
           <button
@@ -199,7 +199,7 @@ export function VisualizerPanel() {
         ))}
       </div>
 
-      {/* Canvas — fills the container (explicit w/h so it never falls back to the
+      {/* Canvas - fills the container (explicit w/h so it never falls back to the
           intrinsic 300×150) and paints its own background each frame. */}
       <div className="flex-1 relative overflow-hidden min-h-0">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />

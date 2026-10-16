@@ -2,7 +2,7 @@
 id           = "media"
 display_name = "Media"
 version      = "0.1.9"
-description  = "Streaming multimédia — Watch (films/séries) et Listen (musique)"
+description  = "Streaming multimédia - Watch (films/séries) et Listen (musique)"
 author       = "Kubuno Contributors"
 license      = "AGPL-3.0"
 homepage_url = "https://github.com/kubuno/kubuno"
@@ -49,7 +49,7 @@ publishes = [
 ]
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Media — admin panel pages
+#  Media - admin panel pages
 # ══════════════════════════════════════════════════════════════════════════════
 # Each becomes an entry of the admin menu (Modules → Media), at its own address
 # (/admin/modules/media/<id>). The metadata provider keys are SECRETS the module

@@ -5,11 +5,11 @@ export type IdentifyKind = 'movie' | 'show' | 'artist' | 'album'
 export interface IdentifyTarget {
   kind: IdentifyKind
   id:   string
-  /** Current name/title — pre-fills the search field. */
+  /** Current name/title - pre-fills the search field. */
   name: string
-  /** Known year (movies) — pre-fills the year field. */
+  /** Known year (movies) - pre-fills the year field. */
   year?: number | null
-  /** Artist name (albums) — scopes the MusicBrainz search. */
+  /** Artist name (albums) - scopes the MusicBrainz search. */
   artist?: string | null
 }
 

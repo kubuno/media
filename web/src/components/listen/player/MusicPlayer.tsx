@@ -438,7 +438,7 @@ function CenterContent() {
 
   return (
     <div className="flex flex-col items-center gap-4 px-7 pt-5 pb-5 mx-auto" style={{ width: CENTER_W }}>
-      {/* Cover art — large, with a gentle breathing scale while playing */}
+      {/* Cover art - large, with a gentle breathing scale while playing */}
       <div className={`transition-all duration-700 ease-out ${isPlaying ? 'scale-100' : 'scale-[0.94]'}`}>
         <CoverArt url={currentTrack.coverUrl} size={196} />
       </div>
@@ -497,7 +497,7 @@ function CenterContent() {
         </button>
       </div>
 
-      {/* Secondary controls — shuffle + repeat */}
+      {/* Secondary controls - shuffle + repeat */}
       <div className="flex items-center gap-3">
         <button
           onClick={toggleShuffle}
@@ -655,7 +655,7 @@ function FullPlayer({ onMinimize, onClose }: {
             <span className="px-3 py-1.5 rounded-full bg-primary text-white text-sm font-medium shadow">Déposer pour ajouter à la file</span>
           </div>
         )}
-        {/* Left panel — visualizer */}
+        {/* Left panel - visualizer */}
         <div
           className="overflow-hidden transition-[width,opacity] duration-300 flex-shrink-0"
           style={{
@@ -666,7 +666,7 @@ function FullPlayer({ onMinimize, onClose }: {
           {showLeft && <VisualizerPanel />}
         </div>
 
-        {/* Center — player controls, vertically centered so the fixed-height
+        {/* Center - player controls, vertically centered so the fixed-height
             window never shows an empty gap when no side panel is open (the
             immersive backdrop fills the surrounding space). overflow-x-hidden:
             overflow-y:auto otherwise forces overflow-x:auto (CSS spec). */}
@@ -705,7 +705,7 @@ function FullPlayer({ onMinimize, onClose }: {
           {showQueue && <QueuePanel />}
         </div>
 
-        {/* Right panel — parametric equalizer */}
+        {/* Right panel - parametric equalizer */}
         <div
           className="overflow-hidden transition-[width,opacity] duration-300 flex-shrink-0"
           style={{

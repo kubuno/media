@@ -44,10 +44,10 @@ pub async fn get_settings(
 #[derive(Debug, Deserialize)]
 pub struct PatchSettingsBody {
     pub metadata_language: Option<String>,
-    /// Official TMDB API key (v3 key or v4 read token) — the primary
+    /// Official TMDB API key (v3 key or v4 read token) - the primary
     /// movie/show metadata provider when set.
     pub tmdb_api_key:      Option<String>,
-    /// OMDb API key — Rotten Tomatoes / IMDb / Metacritic ratings relay.
+    /// OMDb API key - Rotten Tomatoes / IMDb / Metacritic ratings relay.
     pub omdb_api_key:      Option<String>,
 }
 
@@ -99,7 +99,7 @@ pub async fn trigger_enrich(
     require_admin(&user)?;
 
     // Only re-queue items that actually need it (failed or not-yet-enriched).
-    // Never touch already-'ready' metadata — a full library re-enrichment is
+    // Never touch already-'ready' metadata - a full library re-enrichment is
     // unrequested and risks overwriting good metadata.
     let reset_movies = state.db.execute(
         "UPDATE media.movies SET meta_status = 'pending_meta' WHERE meta_status = 'error_meta'",

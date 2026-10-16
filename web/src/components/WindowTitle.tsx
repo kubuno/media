@@ -5,13 +5,13 @@ import { useEffect, useRef, useState } from 'react'
 // FloatingWindow lets its title wrap so a long dialog heading pushes the band
 // down instead of being clipped. That is right for a dialog, wrong for a media
 // player: its band carries up to six action buttons, so at the minimum window
-// width the leftover space is a few dozen pixels — enough to break
+// width the leftover space is a few dozen pixels - enough to break
 // "Parle-moi (feat. Zaho)" onto four lines and turn the accent band into a
 // block three times its height.
 //
 // This label measures the room it is actually given and gives way instead:
 // the icon goes first (it buys ~25px for the text), then the text itself.
-// Nothing is lost — every one of these windows already shows the track or file
+// Nothing is lost - every one of these windows already shows the track or file
 // name in its body.
 
 /** Below this the text is too short to be read: drop it entirely. */
@@ -29,7 +29,7 @@ export function WindowTitle({ text, icon }: { text: string; icon?: React.ReactNo
     const el = ref.current
     if (!el || typeof ResizeObserver === 'undefined') return
     // The host cell is `flex-1 min-w-0`, so its width is pure leftover space
-    // and never depends on what we render inside it — no measure/render loop.
+    // and never depends on what we render inside it - no measure/render loop.
     const ro = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width
       if (typeof w === 'number') setAvail(w)

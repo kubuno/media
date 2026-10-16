@@ -71,7 +71,7 @@ class StemSeparator extends AudioWorkletProcessor {
     for (let n = 0; n < N; n++) { const w = win[n]; reL[n] = this.inL[n] * w; imL[n] = 0; reR[n] = this.inR[n] * w; imR[n] = 0 }
     this.fft(reL, imL, false); this.fft(reR, imR, false)
     const eps = 1e-9
-    // Pass 1 — per-bin soft vocal mask (centred + coherent + vocal-band), temporally smoothed.
+    // Pass 1 - per-bin soft vocal mask (centred + coherent + vocal-band), temporally smoothed.
     for (let k = 0; k < N; k++) {
       const lr = reL[k], li = imL[k], rr = reR[k], ri = imR[k]
       const Lm2 = lr * lr + li * li, Rm2 = rr * rr + ri * ri
@@ -87,10 +87,10 @@ class StemSeparator extends AudioWorkletProcessor {
       this.maskPrev[k] = m
       mask[k] = m
     }
-    // Pass 2 — 3-tap frequency smoothing of the mask (suppress musical noise).
+    // Pass 2 - 3-tap frequency smoothing of the mask (suppress musical noise).
     maskS[0] = mask[0]; maskS[N - 1] = mask[N - 1]
     for (let k = 1; k < N - 1; k++) maskS[k] = (mask[k - 1] + 2 * mask[k] + mask[k + 1]) * 0.25
-    // Pass 3 — apply as a soft Wiener-style mask directly on L/R (preserves timbre/stereo).
+    // Pass 3 - apply as a soft Wiener-style mask directly on L/R (preserves timbre/stereo).
     for (let k = 0; k < N; k++) {
       const lr = reL[k], li = imL[k], rr = reR[k], ri = imR[k]
       let g

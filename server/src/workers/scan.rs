@@ -28,7 +28,7 @@ async fn resolve_artist(
         .await?;
 
     // The SELECT above already guards against duplicates, so a plain INSERT is
-    // enough here — no ON CONFLICT / RETURNING needed.
+    // enough here - no ON CONFLICT / RETURNING needed.
     let id = if let Some(id) = existing {
         id
     } else {
@@ -421,7 +421,7 @@ pub async fn run_scan(
                 .await?;
             }
 
-            // Local artwork (folder image / embedded art) beats remote covers —
+            // Local artwork (folder image / embedded art) beats remote covers -
             // resolve once per album per scan.
             if let Some(aid) = album_id {
                 if cover_done.insert(aid) {
@@ -779,7 +779,7 @@ pub async fn index_single_file(
             }
         });
     } else {
-        // Audio — probe first: embedded tags beat path guessing.
+        // Audio - probe first: embedded tags beat path guessing.
         let info = ffprobe::probe(&settings.transcoding.ffprobe_bin, file_path)
             .await
             .unwrap_or_default();

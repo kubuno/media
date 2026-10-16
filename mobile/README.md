@@ -1,4 +1,4 @@
-# Kubuno Media — mobile apps
+# Kubuno Media - mobile apps
 
 Reserved for the mobile clients of the Media module, organised like the other platforms of this repository:
 

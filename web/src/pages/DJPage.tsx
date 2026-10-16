@@ -17,12 +17,12 @@ import { SignedImg } from '../components/SignedImg'
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 // Hardware look: matte charcoal chassis (Pioneer-style) with neon deck accents.
-// Colour rules from the user: NO cyan, NO violet, NO pink — blue + orange lead,
+// Colour rules from the user: NO cyan, NO violet, NO pink - blue + orange lead,
 // amber for master/branding, green/yellow/red/white for the extra decks.
 
-const COL_A  = '#2f7dff'   // electric blue — deck A
-const COL_B  = '#ff7a1a'   // orange        — deck B
-const ACCENT = '#ffb02e'   // amber         — master / branding / crossfader
+const COL_A  = '#2f7dff'   // electric blue - deck A
+const COL_B  = '#ff7a1a'   // orange        - deck B
+const ACCENT = '#ffb02e'   // amber         - master / branding / crossfader
 
 const DECK_FIELD = { A: 'deckA', B: 'deckB', C: 'deckC', D: 'deckD', E: 'deckE', F: 'deckF' } as const
 const DECK_COLOR: Record<DeckId, string> = {
@@ -767,7 +767,7 @@ function JogWheel({ isPlaying, position, duration, color, size = 122,
         transition: 'box-shadow 0.3s, border-color 0.15s',
       }} />
 
-      {/* Vinyl platter — spins during playback, follows the hand while scratching */}
+      {/* Vinyl platter - spins during playback, follows the hand while scratching */}
       <div
         className="absolute rounded-full pointer-events-none"
         style={{
@@ -789,7 +789,7 @@ function JogWheel({ isPlaying, position, duration, color, size = 122,
         }} />
       </div>
 
-      {/* Center label — outside the rotating platter so the time stays readable */}
+      {/* Center label - outside the rotating platter so the time stays readable */}
       <div className="absolute rounded-full flex flex-col items-center justify-center pointer-events-none" style={{
         inset: '29%',
         background: `radial-gradient(circle at 38% 30%, #26282e, #131418 75%)`,
@@ -816,7 +816,7 @@ const PAD_MODES: [PadMode, string][] = [
   ['beatjump', 'BEAT JUMP'],
 ]
 
-// Fixed multi-colour pad palette (controller look) — no cyan/violet/pink.
+// Fixed multi-colour pad palette (controller look) - no cyan/violet/pink.
 const PAD_PALETTE = ['#2f7dff', '#ff7a1a', '#3ddc84', '#ffd02e', '#ff5252', '#8fd14f', '#ff9f43', '#e8e9ee']
 
 // Labels shown on the 8 pads for each mode.
@@ -843,7 +843,7 @@ function PadGrid({ deck, color, st, onMode, onTrigger, onRelease, onDelete }: {
   const cueMenu = (i: number): MenuItem[] => {
     const cue = st.hotCues[i]
     return [
-      { type: 'label', text: cue?.label || `Point ${i + 1} — ${cue ? fmt(cue.position) : ''}` },
+      { type: 'label', text: cue?.label || `Point ${i + 1} - ${cue ? fmt(cue.position) : ''}` },
       { type: 'custom', render: () => (
         <input autoFocus defaultValue={cue?.label ?? ''} placeholder="Nom du point…"
           onChange={e => setHotCueLabel(deck, i, e.target.value)}
@@ -877,7 +877,7 @@ function PadGrid({ deck, color, st, onMode, onTrigger, onRelease, onDelete }: {
         ))}
       </div>
 
-      {/* 8 pads — full controller-style colors (blue/orange/green/yellow/red) */}
+      {/* 8 pads - full controller-style colors (blue/orange/green/yellow/red) */}
       <div className="grid grid-cols-4 gap-1">
         {labels.map((lbl, i) => {
           const cue = mode === 'hotcue' ? st.hotCues[i] : null
@@ -890,7 +890,7 @@ function PadGrid({ deck, color, st, onMode, onTrigger, onRelease, onDelete }: {
               onMouseUp={() => loopMode && onRelease(i)}
               onContextMenu={e => { e.preventDefault(); if (mode === 'hotcue' && cue) setCueCtx({ pos: { top: e.clientY, left: e.clientX, minWidth: 180 }, i }) }}
               title={mode === 'hotcue'
-                ? (cue ? `${cue.label || `Point ${i+1}`} — ${fmt(cue.position)}\nClic droit : options` : `Définir point ${i+1}`)
+                ? (cue ? `${cue.label || `Point ${i+1}`} - ${fmt(cue.position)}\nClic droit : options` : `Définir point ${i+1}`)
                 : labels[i]}
               className="h-8 rounded-md font-extrabold transition-all active:scale-95 active:brightness-125 truncate px-1"
               style={lit ? {
@@ -960,13 +960,13 @@ function DeckMeta({ st, color }: { st: DeckState; color: string }) {
   const beat = (Math.floor(totalBeats) % 4 + 4) % 4
 
   const stats: { label: string; value: React.ReactNode; accent?: boolean }[] = [
-    { label: 'ORIG',  value: st.bpm != null ? st.bpm.toFixed(1) : '—', accent: true },
-    { label: '½TON',  value: st.track ? `${semis >= 0 ? '+' : ''}${semis.toFixed(1)}` : '—' },
+    { label: 'ORIG',  value: st.bpm != null ? st.bpm.toFixed(1) : '-', accent: true },
+    { label: '½TON',  value: st.track ? `${semis >= 0 ? '+' : ''}${semis.toFixed(1)}` : '-' },
     { label: 'GAIN',  value: `${gainDb >= 0 ? '+' : ''}${gainDb.toFixed(1)}` },
-    { label: 'LOOP',  value: loopBeats != null ? `${loopBeats >= 1 ? Math.round(loopBeats) : loopBeats.toFixed(2)}t` : '—', accent: !!loopBeats },
+    { label: 'LOOP',  value: loopBeats != null ? `${loopBeats >= 1 ? Math.round(loopBeats) : loopBeats.toFixed(2)}t` : '-', accent: !!loopBeats },
     { label: 'MES.',  value: (
       <span className="flex items-center gap-1">
-        <span>{st.track ? `${bar}` : '—'}</span>
+        <span>{st.track ? `${bar}` : '-'}</span>
         <span className="flex gap-0.5">
           {[0, 1, 2, 3].map(i => (
             <span key={i} style={{ width: 3, height: 3, borderRadius: 99, background: i === beat && st.isPlaying ? color : rgba('#ffffff', 0.18) }} />
@@ -986,7 +986,7 @@ function DeckMeta({ st, color }: { st: DeckState; color: string }) {
         </span>
       </div>
 
-      {/* Pro readouts — neat equal tiles with dividers, fill the middle band */}
+      {/* Pro readouts - neat equal tiles with dividers, fill the middle band */}
       <div className="flex-1 flex self-stretch rounded-md overflow-hidden" style={{
         background: rgba('#000000', 0.25), border: `1px solid ${rgba('#ffffff', 0.06)}`,
       }}>
@@ -1051,7 +1051,7 @@ function QueuePanel({ deck, color, st, onClose }: { deck: DeckId; color: string;
       {/* Header */}
       <div className="flex items-center gap-2 px-3 flex-shrink-0" style={{ height: 38, borderBottom: `1px solid ${UI.border}` }}>
         <ListMusic className="w-4 h-4" style={{ color }} />
-        <span style={{ color: UI.text, fontSize: 12, fontWeight: 700 }}>File — Deck {deck}</span>
+        <span style={{ color: UI.text, fontSize: 12, fontWeight: 700 }}>File - Deck {deck}</span>
         <span style={{ color: UI.muted, fontSize: 10 }}>
           {st.queue.length === 0 ? 'vide' : `${st.queueIndex + 1}/${st.queue.length} · ${upcoming} à venir`}
         </span>
@@ -1089,7 +1089,7 @@ function QueuePanel({ deck, color, st, onClose }: { deck: DeckId; color: string;
                 </span>
                 <button onClick={() => playQueueIndex(deck, i)} className="flex-1 min-w-0 text-left">
                   <p className="truncate" style={{ color: current ? UI.text : UI.soft, fontSize: 11, fontWeight: current ? 600 : 400 }}>{t.title}</p>
-                  <p className="truncate" style={{ color: UI.dim, fontSize: 9 }}>{t.artistName ?? '—'} · {fmt(t.durationSecs)}</p>
+                  <p className="truncate" style={{ color: UI.dim, fontSize: 9 }}>{t.artistName ?? '-'} · {fmt(t.durationSecs)}</p>
                 </button>
                 <div className="flex items-center gap-0.5 flex-shrink-0">
                   <button onClick={() => moveQueueItem(deck, i, i - 1)} disabled={i === 0} title="Monter"
@@ -1443,7 +1443,7 @@ function DJDeck({ deck, color, compact = false }: { deck: DeckId; color: string;
 
   return (
     <div className="flex flex-col gap-1.5 p-2.5 h-full relative overflow-hidden" style={{ background: deckBg(color) }}>
-      {/* Top accent line — flashes red near the end of the track */}
+      {/* Top accent line - flashes red near the end of the track */}
       {(() => {
         const endingSoon = st.isPlaying && st.duration > 0 && st.duration - st.position <= 20
         const c = endingSoon ? '#ff3b4e' : color
@@ -1507,7 +1507,7 @@ function DJDeck({ deck, color, compact = false }: { deck: DeckId; color: string;
                 style={{ padding: '1px 7px', background: UI.card, border: `1px solid ${UI.border}`, color: UI.soft, lineHeight: 1 }}
                 title="Taper en rythme pour définir le BPM"
               >
-                <span style={{ fontSize: 10, fontWeight: 800, fontFamily: 'monospace', color }}>{st.bpm ? st.bpm.toFixed(0) : '—'}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, fontFamily: 'monospace', color }}>{st.bpm ? st.bpm.toFixed(0) : '-'}</span>
                 <span style={{ fontSize: 6.5, letterSpacing: 0.5, color: UI.muted }}>TAP</span>
               </button>
               {/* Queue button */}
@@ -1553,7 +1553,7 @@ function DJDeck({ deck, color, compact = false }: { deck: DeckId; color: string;
                 {st.track?.title ?? 'Aucune piste chargée'}
               </p>
               <div className="flex items-center gap-2 truncate" style={{ fontSize: 10, color: UI.muted }}>
-                <span className="truncate">{st.track?.artistName ?? '—'}</span>
+                <span className="truncate">{st.track?.artistName ?? '-'}</span>
                 {st.track && <span style={{ color: UI.dim }}>· {fmt(st.duration)}</span>}
                 {st.bpm != null && <span style={{ color }}>· {st.bpm.toFixed(1)} BPM</span>}
                 {st.keyName && <span style={{ color, fontWeight: 700 }}>· {st.keyName}</span>}
@@ -1566,7 +1566,7 @@ function DJDeck({ deck, color, compact = false }: { deck: DeckId; color: string;
         </div>
       </div>
 
-      {/* Waveform (grows) — live analyser or CDJ zoomed view */}
+      {/* Waveform (grows) - live analyser or CDJ zoomed view */}
       <div ref={waveWrapRef} className="flex-1 min-h-0" style={{ minHeight: 56 }}>
         {zoomWave
           ? <CDJWaveform eng={eng} duration={st.duration} trackId={st.track?.id} color={color} bpm={st.bpm} beatOffset={st.beatOffset} onSeek={s => seek(deck, s)} height={waveH} />
@@ -1779,7 +1779,7 @@ function DJDeck({ deck, color, compact = false }: { deck: DeckId; color: string;
         </button>
       </div>
 
-      {/* Embedded channel strip — only when decks C–F have no central mixer column */}
+      {/* Embedded channel strip - only when decks C–F have no central mixer column */}
       {compact && <DeckChannelStrip deck={deck} color={color} />}
 
       {queueOpen && <QueuePanel deck={deck} color={color} st={st} onClose={() => setQueueOpen(false)} />}
@@ -1893,14 +1893,14 @@ function DJDeckCompact({ deck, color }: { deck: DeckId; color: string }) {
           </div>
           <p className="truncate font-bold leading-tight" style={{ color: st.track ? UI.text : UI.dim, fontSize: 14 }}>{st.track?.title ?? 'Aucune piste'}</p>
           <div className="flex items-center gap-1.5 truncate" style={{ fontSize: 9, color: UI.muted }}>
-            <span className="truncate">{st.track?.artistName ?? '—'}</span>
+            <span className="truncate">{st.track?.artistName ?? '-'}</span>
             {st.bpm != null && <span style={{ color }}>· {st.bpm.toFixed(1)} BPM</span>}
             {st.keyName && <span style={{ color, fontWeight: 700 }}>· {st.keyName}</span>}
           </div>
         </div>
         <div className="text-right flex-shrink-0">
           <div style={{ fontFamily: 'monospace', fontSize: 17, fontWeight: 800, color: st.track ? UI.text : UI.dim, lineHeight: 1 }}>{fmt(st.position)}</div>
-          <div style={{ fontFamily: 'monospace', fontSize: 8.5, color: UI.muted }}>{st.track ? fmtR(st.position, st.duration) : '—'}</div>
+          <div style={{ fontFamily: 'monospace', fontSize: 8.5, color: UI.muted }}>{st.track ? fmtR(st.position, st.duration) : '-'}</div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button onClick={() => analyzeTrack(deck)} disabled={!st.track || analyzing === deck} style={mini(analyzing === deck)} title="Analyser : BPM + tonalité + grille">{analyzing === deck ? '…' : 'ANALYSE'}</button>
@@ -2142,9 +2142,9 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
         return (
           <div className="flex items-center justify-center gap-2 rounded-md py-0.5" style={{ background: rgba('#000000', 0.22), border: `1px solid ${rgba(c, 0.4)}` }}
             title="Compatibilité harmonique (roue Camelot) entre A et B">
-            <span style={{ color: COL_A, fontSize: 9, fontFamily: 'monospace', fontWeight: 700 }}>{camelotOf(a) ?? '—'}</span>
+            <span style={{ color: COL_A, fontSize: 9, fontFamily: 'monospace', fontWeight: 700 }}>{camelotOf(a) ?? '-'}</span>
             <span style={{ color: c, fontSize: 9, fontWeight: 800 }}>{!both ? 'HARMONIE' : ok ? '✓ COMPATIBLE' : '≠'}</span>
-            <span style={{ color: COL_B, fontSize: 9, fontFamily: 'monospace', fontWeight: 700 }}>{camelotOf(b) ?? '—'}</span>
+            <span style={{ color: COL_B, fontSize: 9, fontFamily: 'monospace', fontWeight: 700 }}>{camelotOf(b) ?? '-'}</span>
           </div>
         )
       })()}
@@ -2183,7 +2183,7 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
         </div>
       </div>
 
-      {/* SOUND COLOR FX — shared effect type for both COLOR knobs */}
+      {/* SOUND COLOR FX - shared effect type for both COLOR knobs */}
       <div className="grid grid-cols-4 gap-1">
         {([['filter', 'FILTER'], ['noise', 'NOISE'], ['crush', 'CRUSH'], ['echo', 'DUB ECHO']] as [ColorFx, string][]).map(([fx, lbl]) => {
           const active = deckA.colorFx === fx
@@ -2201,7 +2201,7 @@ function DJMixer({ onOpenEq }: { onOpenEq: () => void }) {
         })}
       </div>
 
-      {/* Channel TRIM + faders + VU — same 2-col grid as the EQ so A/B align ───── */}
+      {/* Channel TRIM + faders + VU - same 2-col grid as the EQ so A/B align ───── */}
       <div className="grid grid-cols-2 gap-2 items-stretch flex-1 min-h-0">
         <div className="flex flex-col items-center gap-1.5 min-h-0">
           <Knob value={deckA.gain} min={0} max={2} onChange={(v: number) => setGain('A', v)} label="TRIM" color={COL_A} size={34} />
@@ -2994,7 +2994,7 @@ export default function DJPage() {
           {/* Master level meter + clip */}
           <MasterMeter />
 
-          {/* Deck count 2 / 4 / 6 — desktop only (mobile forces the stack to 2). */}
+          {/* Deck count 2 / 4 / 6 - desktop only (mobile forces the stack to 2). */}
           <div className="hidden lg:flex rounded overflow-hidden" style={{ border: `1px solid ${UI.border}` }} title="Nombre de platines">
             {DECK_COUNTS.map(n => {
               const active = deckCount === n
@@ -3041,7 +3041,7 @@ export default function DJPage() {
             <ListMusic className="w-3 h-3" /> SETLIST{historyLen ? ` (${historyLen})` : ''}
           </button>
 
-          {/* PANIC — kill switch */}
+          {/* PANIC - kill switch */}
           <button
             onClick={panic}
             className="rounded font-bold active:scale-95"
@@ -3067,7 +3067,7 @@ export default function DJPage() {
           </div>
 
           {/* Global shell actions (language, notifications, settings, help, waffle,
-              avatar) — re-hosted here since the global AppHeader is hidden. */}
+              avatar) - re-hosted here since the global AppHeader is hidden. */}
           <HeaderActions compact dark />
         </div>
       </div>

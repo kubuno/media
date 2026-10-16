@@ -63,7 +63,7 @@ async fn favorite_set(state: &AppState, user_id: Uuid) -> Result<HashSet<Uuid>, 
     Ok(rows.into_iter().map(|r| r.station_id).collect())
 }
 
-/// GET /radio/stations — list builtin + own stations, filtered.
+/// GET /radio/stations - list builtin + own stations, filtered.
 pub async fn list_stations(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -79,7 +79,7 @@ pub async fn list_stations(
     // `tags` is now a JSON array column: `$3 = ANY(tags)` becomes the portable
     // containment test below. Every optional filter binds its value twice
     // under two distinct placeholders (once for the `IS NULL` guard, once for
-    // actual use) — placeholders are never reused.
+    // actual use) - placeholders are never reused.
     let tag_contains = state.db.backend().json_array_contains("tags", 3);
     let sql = format!(
         r#"SELECT {STATION_COLUMNS}
@@ -98,8 +98,8 @@ pub async fn list_stations(
     // Free-text `q` matches the station name OR any of its tags,
     // case-insensitively. A substring test over a JSON array's elements has
     // no single portable SQL form (the old `EXISTS (SELECT 1 FROM
-    // unnest(tags) tg WHERE tg ILIKE …)`), so — unlike the DB-side filters
-    // above — it is applied here in Rust, over the filtered set, and
+    // unnest(tags) tg WHERE tg ILIKE …)`), so - unlike the DB-side filters
+    // above - it is applied here in Rust, over the filtered set, and
     // LIMIT/OFFSET are then applied to the resulting Vec instead of to the
     // SQL query. The catalogue (curated builtin stations + one user's own) is
     // small enough for this to be cheap; note the behaviour change if it ever
@@ -118,7 +118,7 @@ pub async fn list_stations(
     Ok(Json(json!({ "stations": out })))
 }
 
-/// GET /radio/tags — distinct tags with station counts (filter chips).
+/// GET /radio/tags - distinct tags with station counts (filter chips).
 pub async fn list_tags(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -154,7 +154,7 @@ pub async fn list_tags(
     Ok(Json(json!({ "tags": tags })))
 }
 
-/// GET /radio/favorites — the user's favorite stations.
+/// GET /radio/favorites - the user's favorite stations.
 pub async fn list_favorites(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -175,7 +175,7 @@ pub async fn list_favorites(
     Ok(Json(json!({ "stations": out })))
 }
 
-/// GET /radio/recent — recently played stations.
+/// GET /radio/recent - recently played stations.
 pub async fn list_recent(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -198,7 +198,7 @@ pub async fn list_recent(
     Ok(Json(json!({ "stations": out })))
 }
 
-/// POST /radio/stations — add a custom station.
+/// POST /radio/stations - add a custom station.
 pub async fn create_station(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -246,7 +246,7 @@ pub async fn create_station(
     Ok(Json(station_json(&station, false)))
 }
 
-/// PATCH /radio/stations/:id — update a custom station (owner only).
+/// PATCH /radio/stations/:id - update a custom station (owner only).
 pub async fn update_station(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -291,7 +291,7 @@ pub async fn update_station(
     Ok(Json(station_json(&station, false)))
 }
 
-/// DELETE /radio/stations/:id — remove a custom station (owner only).
+/// DELETE /radio/stations/:id - remove a custom station (owner only).
 pub async fn delete_station(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -310,7 +310,7 @@ pub async fn delete_station(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// POST /radio/stations/:id/favorite — toggle favorite.
+/// POST /radio/stations/:id/favorite - toggle favorite.
 pub async fn toggle_favorite(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
@@ -347,13 +347,13 @@ pub async fn toggle_favorite(
     }
 }
 
-/// POST /radio/stations/:id/play — record a play (recent + click count).
+/// POST /radio/stations/:id/play - record a play (recent + click count).
 pub async fn record_play(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, MediaError> {
-    // `ON CONFLICT (...) DO UPDATE SET played_at = NOW()` — bind a Rust
+    // `ON CONFLICT (...) DO UPDATE SET played_at = NOW()` - bind a Rust
     // timestamp as the incoming value instead of relying on `NOW()`.
     let played_at = chrono::Utc::now();
     let clause = state.db.backend().upsert(
@@ -376,7 +376,7 @@ pub async fn record_play(
     Ok(Json(json!({ "ok": true })))
 }
 
-/// GET /radio/discover?q=… — search the public Radio Browser directory.
+/// GET /radio/discover?q=… - search the public Radio Browser directory.
 pub async fn discover(
     State(state): State<AppState>,
     Extension(_user): Extension<AuthUser>,
@@ -415,7 +415,7 @@ pub async fn discover(
     Ok(Json(json!({ "results": results })))
 }
 
-/// GET /radio/:id/stream — proxy the live audio stream through the backend.
+/// GET /radio/:id/stream - proxy the live audio stream through the backend.
 pub async fn stream(
     State(state): State<AppState>,
     Extension(user): Extension<AuthUser>,

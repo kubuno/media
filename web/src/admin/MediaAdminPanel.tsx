@@ -94,7 +94,7 @@ function MetadataSection() {
       </SettingsRow>
       <SettingsRow
         label="Clé API TMDB"
-        description="Fournisseur principal films/séries : distribution avec photos, bandes-annonces, classifications, textes localisés. Clé v3 ou jeton v4 — gratuite sur themoviedb.org/settings/api. Vide = repli sans clé (Wikipédia + recherche publique TMDB)."
+        description="Fournisseur principal films/séries : distribution avec photos, bandes-annonces, classifications, textes localisés. Clé v3 ou jeton v4 - gratuite sur themoviedb.org/settings/api. Vide = repli sans clé (Wikipédia + recherche publique TMDB)."
       >
         <div className="flex items-center gap-2">
           <KeyRound size={14} className="text-text-tertiary" />

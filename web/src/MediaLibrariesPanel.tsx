@@ -117,7 +117,7 @@ function AddLibraryForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: 
           />
         </div>
 
-        {/* Dossier — ouvre le navigateur de fichiers du drive */}
+        {/* Dossier - ouvre le navigateur de fichiers du drive */}
         <div>
           <label className="block text-xs font-medium text-text-secondary mb-1">{t('media_field_files_folder')}</label>
           <button

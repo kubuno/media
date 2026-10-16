@@ -268,7 +268,7 @@ impl MusicBrainzService {
                 .or_else(|| img.thumbnails.get("large"))
                 .cloned()
                 .unwrap_or_else(|| img.image.clone());
-            // CAA returns http:// URLs — force https to avoid mixed content.
+            // CAA returns http:// URLs - force https to avoid mixed content.
             url.replacen("http://", "https://", 1)
         }))
     }

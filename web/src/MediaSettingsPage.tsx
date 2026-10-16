@@ -209,8 +209,8 @@ function AboutTab() {
 
 // ── Main page (mail-style breadcrumb + tab bar) ─────────────────────────────────
 
-// This page holds ONLY per-user preferences. Instance administration — the
-// metadata provider keys (TMDB/OMDb) and language — moved to the core admin
+// This page holds ONLY per-user preferences. Instance administration - the
+// metadata provider keys (TMDB/OMDb) and language - moved to the core admin
 // console (Modules ▸ Media), see `admin/MediaAdminPanel.tsx`.
 type Tab = 'preferences' | 'about'
 

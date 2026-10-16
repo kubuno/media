@@ -2,7 +2,7 @@
 name        = "kubuno-media"
 version     = "0.1.9"
 edition     = "2021"
-description = "Kubuno Media — Watch (films/séries) et Listen (musique)"
+description = "Kubuno Media - Watch (films/séries) et Listen (musique)"
 license     = "AGPL-3.0"
 repository  = "https://github.com/kubuno/media"
 
